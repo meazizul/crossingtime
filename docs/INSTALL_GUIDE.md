@@ -89,9 +89,9 @@ person button and press **Test haptic pulse**.
 Android phones vary. If you get stuck, ask your instructor. It is a one-minute
 fix in person.
 
-**The session code.** Each time CrossingTime opens it asks for a session
-code. The four practice activities open after you type the code your
-instructor gives you at the session. Press **Later** to look around first:
+**The session code.** The first time CrossingTime opens it asks for a
+session code. The four practice activities open after you type the code your
+instructor gives you at the session, and stay open after that. Press **Later** to look around first:
 Help, Accessibility and crossing times work without the code.
 
 **Coming soon: Google Play.** The app is being set up on Google Play. When

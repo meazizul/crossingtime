@@ -33,13 +33,13 @@ Behind the buttons:
 - **Browser:** <https://azizulhaque.me/crossingtime/app/>. Everything works
   except vibration.
 
-**The session code.** Since build 18 the app asks for a session code each time
-it is opened; the four practice activities open after it is typed. Everything
-else in the app works without it. Instructors running their own sessions: ask
+**The session code.** The first time the app is opened it asks for a session
+code; the four practice activities open after it is typed, and the phone stays
+unlocked from then on. Everything else in the app works without it. Instructors running their own sessions: ask
 the team for the code.
 
 To check which build you have: open the app, **Help**, **About**. It should say
-build 18. Step-by-step help for each phone, written to be read aloud:
+build 19. Step-by-step help for each phone, written to be read aloud:
 [`docs/INSTALL_GUIDE.md`](docs/INSTALL_GUIDE.md).
 
 ## Test it and tell us what you find

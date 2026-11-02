@@ -211,17 +211,25 @@ code, never a name.
 
 ## 1e. The session code
 
-Since build 18 every start of the app asks for the **session code** in a
-pop-up (after the sound tutorial on a first run). Later closes the pop-up:
+Until a session code has been typed once, the app asks for it in a pop-up
+at start (after the sound tutorial on a first run). Later closes the pop-up:
 Help, Accessibility, Instructor setup, Progress and setup links all work, and
 the same field sits in a card at the top of Home; the four practice
 activities stay disabled until the code is typed, and a link, a Siri phrase
-or an Android shortcut to one of them reopens the pop-up. The unlock lasts
-until the app is closed (sessionStorage); backgrounding keeps it. The check
-happens on the phone, so it works with no internet. A wrong code says to ask
-Azizul Haque or the O&M specialist for the code. The code is kept
-in the app as a hash (`GS_SESSION_CODE_SHA256` in `js/app.js`); to change it,
-replace the hash and the small fallback hash next to it.
+or an Android shortcut to one of them reopens the pop-up. Since build 19 the
+unlock is permanent: it is kept with the app's other settings and their
+durable copy, so closing the app or updating it does not ask again. The
+check happens on the phone, so it works with no internet. A wrong code says
+to ask Azizul Haque or the O&M specialist for the code.
+
+There are three codes, kept in the app only as hashes (`GS_SESSION_CODES` in
+`js/app.js`): a tester code that works any time, and one code for each run
+of the SOMA 2026 session, which works only during that run on the phone's
+own clock (Saturday 5 December: the first run 12:30 to 15:30, the repeat
+15:00 to 18:30). A presentation code typed outside its window says it works
+only during its session. The codes themselves are not in this repository;
+the team has them. After the last presentation the lock is switched off by
+setting `GS_SESSION_LOCK_ENABLED` to `false`.
 
 ## 2. Instructor setup
 

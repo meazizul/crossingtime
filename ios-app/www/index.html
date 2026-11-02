@@ -98,7 +98,7 @@
 
       <section class="setup-required-prompt session-code-card" id="sessionCodeCard" aria-labelledby="sessionCodeTitle" hidden>
         <p class="setup-required-prompt-title" id="sessionCodeTitle">Session code</p>
-        <p>The four practice activities open with the code you receive at your session. The code is asked each time the app is opened. Help, Accessibility and Instructor setup work without it.</p>
+        <p>The four practice activities open with the code you receive at your session. You type it once. Help, Accessibility and Instructor setup work without it.</p>
         <label class="session-code-label" for="sessionCodeInput">Enter your session code</label>
         <input class="session-code-input" id="sessionCodeInput" type="text" inputmode="numeric" autocomplete="one-time-code" maxlength="12" />
         <button class="settings-action primary" type="button" id="sessionCodeBtn">Unlock</button>
@@ -1000,7 +1000,7 @@
   </dialog>
 
   <!-- ============ DELETE ALL MY PRACTICE HISTORY: the warning comes first (tracker 14.2) ============ -->
-  <!-- Session code pop-up (build 18): asked on every start. -->
+  <!-- Session code pop-up: shown at start until a code has been entered once (build 19). -->
   <dialog id="sessionCodeModal" aria-labelledby="sessionCodeModalTitle" aria-describedby="sessionCodeModalText" aria-modal="true">
     <div class="modal-card">
       <div class="modal-header">

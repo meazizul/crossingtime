@@ -223,7 +223,7 @@ Enable iOS **Reduce Motion**.
 
 **Pass:** the button flash effect is suppressed; everything still functions.
 
-### D8 — The session code (build 18)
+### D8 — The session code (build 19)
 Fresh install (or clear the app's data). Open the app.
 
 **Pass:**
@@ -233,11 +233,15 @@ Fresh install (or clear the app's data). Open the app.
       lands on Home with the code field focused and a spoken prompt
 - [ ] A wrong code is announced and the field keeps focus
 - [ ] The right code unlocks: the pop-up closes, focus moves to the first
-      activity; the unlock survives switching apps but not closing the app
-- [ ] Closing and reopening the app asks for the code again, for every
-      install, including ones updated from earlier builds
+      activity
+- [ ] Closing and reopening the app does not ask again; the unlock also
+      survives an update to a later build
+- [ ] An install updated from build 16, 17 or 18 asks once (the old code no
+      longer works)
+- [ ] A presentation code typed outside its session time says it works only
+      during its session
 - [ ] A double tap on plain text never zooms the page (iPhone and Android)
-- [ ] Help, About says CrossingTime and build 18
+- [ ] Help, About says CrossingTime and build 19
 
 ### D7 — The replay said and shown (build 15)
 VoiceOver and TalkBack **off**. Run a practice try, a Comparison preparation

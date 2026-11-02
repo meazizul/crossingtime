@@ -58,9 +58,9 @@ can play each sound as many times as you like.
 
 ## 2b. The session code
 
-Each time you open the app it asks for your **session code**. The four
+The first time you open the app it asks for your **session code**. The four
 practice parts open after you type the code your instructor gives you at the
-session. Press **Later** to look around first: Help, Accessibility and your
+session, and they stay open from then on. Press **Later** to look around first: Help, Accessibility and your
 crossing times work without the code.
 
 ## 3. The most important thing

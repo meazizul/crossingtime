@@ -8,6 +8,26 @@ than commit history. They are accurate to the day.
 
 ---
 
+## 2026-11-02 (build 19) — the session code is entered once; one code per presentation
+
+- **Entered once, then the phone stays unlocked.** Build 18 asked on every
+  start; the team (Cindi Lashinsky, 1 November) asked for a permanent unlock
+  instead. Until a code has been typed the pop-up still opens at start, and
+  Later still leaves Help, Accessibility and Instructor setup open. The
+  unlock is kept with the app's other settings and their durable copy, so
+  closing the app or updating it does not ask again.
+- **New codes, one per presentation.** The earlier code is retired; every
+  phone, including ones that had already typed it, enters a new code once.
+  There is a tester code for the team and invited O&M testers, and one code
+  for each run of the SOMA 2026 session. A presentation code works only
+  during its own run, read from the phone's clock, so a code passed on after
+  the session no longer opens the activities; outside its time it says it
+  works only during its session. The codes are kept in the app only as
+  hashes, and they are not in this repository: the tests read them from a
+  private file and skip without it.
+- After the last presentation the lock can be switched off with one setting
+  (`GS_SESSION_LOCK_ENABLED`).
+
 ## 2026-10-30 (build 18) — the code on every start, a pop-up, no double-tap zoom, Google Play first
 
 - **The session code is asked on every start of the app**, for everyone,
