@@ -20,6 +20,23 @@ try {
   }
 } catch { /* public clone: no codes */ }
 const haveCodes = Boolean(CODES.tester && CODES.session1 && CODES.session2);
+// After the presentations the lock is switched off (branch release/no-code):
+// then there is nothing to ask for, and only the no-lock test applies.
+const lockOff = /const GS_SESSION_LOCK_ENABLED = false/.test(fs.readFileSync(path.resolve(here, "../www/js/app.js"), "utf8"));
+test.beforeEach(({}, info) => { if (lockOff && !info.title.startsWith("lock off")) test.skip(true, "lock switched off"); });
+
+test("lock off: no pop-up, every activity open, no code card", async ({ page }) => {
+  test.skip(!lockOff, "the lock is on in this build");
+  await openApp(page, { locked: true, disclaimerSeen: false, tutorialSeen: false });
+  await page.click("#disclaimerAcceptBtn");
+  await page.click("#closeTutorial");
+  await page.waitForTimeout(800);
+  await expect(page.locator("#sessionCodeModal")).toBeHidden();
+  await expect(page.locator("#sessionCodeCard")).toBeHidden();
+  await setTimes(page);
+  await page.evaluate(() => gsShowScreen("practice"));
+  await screenVisible(page, "practice");
+});
 const local = (y, mo, d, h, mi) => new Date(y, mo - 1, d, h, mi).getTime();
 
 async function submit(page, code, now) {
