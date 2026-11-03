@@ -1140,7 +1140,7 @@
      * (capacitor://localhost on iOS, https://localhost on Android), which
      * means nothing on anyone else's phone.
      */
-    const GS_PUBLIC_URL = "https://azizulhaque.me/crossingtime/app/";
+    const GS_PUBLIC_URL = "https://crossingtime.app/app/";
     const GS_APP_SCHEME = "gapsense";
 
     function shareBaseUrl() {
