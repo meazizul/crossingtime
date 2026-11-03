@@ -8,6 +8,14 @@ than commit history. They are accurate to the day.
 
 ---
 
+## 2026-11-03 — the web address is crossingtime.app
+
+- The landing page and the web app moved to https://crossingtime.app (the
+  domain Cindi Lashinsky bought for the project). The old address,
+  azizulhaque.me/crossingtime, forwards to it, so links already shared keep
+  working. Links the app makes (the setup link, the practice link) use the
+  new address in the web app now and in the phone apps from their next build.
+
 ## 2026-11-03 (build 20) — verbosity levels, several students on one phone, no QR codes
 
 All from Cindi Lashinsky's notes of 1 November 2026.

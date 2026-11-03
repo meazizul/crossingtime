@@ -18,7 +18,7 @@ through ongoing collaboration with her. See [`NOTICE.md`](NOTICE.md).
 
 ## Install the app (build 18)
 
-**One link, for everyone:** <https://azizulhaque.me/crossingtime/>. It has a
+**One link, for everyone:** <https://crossingtime.app/>. It has a
 button for iPhone, a button for Android and a button for the browser version,
 with two short steps under each. Send that link; it never changes.
 
@@ -30,7 +30,7 @@ Behind the buttons:
   <https://github.com/meazizul/crossingtime/releases/latest/download/CrossingTime-android.apk>.
   Open the downloaded file, press **Install**, allow this source once if asked.
   A Google Play version is in closed testing and will replace this step.
-- **Browser:** <https://azizulhaque.me/crossingtime/app/>. Everything works
+- **Browser:** <https://crossingtime.app/app/>. Everything works
   except vibration.
 
 **The session code.** The first time the app is opened it asks for a session
@@ -83,7 +83,7 @@ not replace instruction.
 **To try it instantly — nothing to install:**
 
 ```
-https://azizulhaque.me/crossingtime/app/?demo=1
+https://crossingtime.app/app/?demo=1
 ```
 
 That link loads example times and opens straight into practice, so you can press

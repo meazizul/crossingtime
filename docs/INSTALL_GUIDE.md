@@ -1,7 +1,7 @@
 # How to Get CrossingTime on Your Phone
 
 A short guide for people taking part in the study. The shortest version is one
-page with a button for each phone: <https://azizulhaque.me/crossingtime/>.
+page with a button for each phone: <https://crossingtime.app/>.
 
 Short sentences. Simple words. Written to be read with a screen reader, or read
 aloud to you. Installing takes about two minutes.
@@ -106,7 +106,7 @@ then the file above is the way.
 You can still try the app in a web browser on any phone or computer. The
 address is:
 
-**<https://azizulhaque.me/crossingtime/app/>**
+**<https://crossingtime.app/app/>**
 
 Everything works except vibration. On an iPhone, Safari can add it to the home
 screen: press **Share**, then **Add to Home Screen**.

@@ -290,7 +290,7 @@ test("native shell: gapsense:// links apply a setup and open activities", async 
   await page.evaluate(() => window.__appListeners.appUrlOpen({ url: "gapsense://open/signal" }));
   await screenVisible(page, "signal");
   // Links made inside the app point at the public web address, never localhost.
-  expect(await page.evaluate(() => buildShareTimingLink())).toMatch(/^https:\/\/azizulhaque\.me\/crossingtime\/app\/#ts=4[A-Za-z0-9_-]+$/);
+  expect(await page.evaluate(() => buildShareTimingLink())).toMatch(/^https:\/\/crossingtime\.app\/app\/#ts=4[A-Za-z0-9_-]+$/);
 });
 
 test("the web build does not take over the audio session", async ({ page }) => {
