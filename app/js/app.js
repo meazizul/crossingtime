@@ -31,8 +31,8 @@ let gsCurrentScreen = "home";
  * and CACHE_VERSION (sw.js). In the native app the real bundle values are
  * read from the App plugin and override these. */
 const GS_APP_VERSION = "1.0";
-const GS_APP_BUILD = "18";
-const GS_APP_DATE = "30 October 2026";
+const GS_APP_BUILD = "19";
+const GS_APP_DATE = "2 November 2026";
 
 async function gsRenderAbout() {
   const el = document.getElementById("aboutVersion");
@@ -166,23 +166,49 @@ function gsShowScreen(name) {
  * out (Cindi's and Jonggi's groups).
  * ============================================================ */
 
-// Build 18: the code is asked on every start of the app, for everyone (the
-// team's request after build 17). The flag lives in sessionStorage, which
-// the phone clears when the app is closed and keeps while it is only in
-// the background. Nothing is grandfathered any more.
-const GS_UNLOCK_KEY = "gs-session-unlocked";
-const GS_SESSION_CODE_SHA256 = "158a323a7ba44870f23d96f1516dd70aa48e9a72db4ebb026b0a89e212a208ab";
-const GS_SESSION_CODE_FALLBACK = "7c549383";   // djb2, for web views without SubtleCrypto
+// Build 19: the code is entered once and the phone stays unlocked (Cindi,
+// 1 Nov: "a permanent unlock - not something the person needs to enter
+// every time"). The flag is an om-* key, so it travels with the durable
+// copy and survives the app being closed or the web view being cleared.
+// Builds 16-18 flags ("om-unlocked", the session flag) do not count: every
+// phone enters one of the build 19 codes once, because the old code was
+// exposed.
+//
+// Three codes, each kept only as a hash:
+//   tester    works any time (the team and invited O&M testers)
+//   session1  works only during the first run of the SOMA session
+//   session2  works only during the repeat
+// The windows are read on the phone's own clock, in its own time zone, so
+// at the venue they are venue time. SOMA 2026, Saturday 5 December: the
+// session runs 1:30-3:00 and is repeated 3:30-5:00. A shared session code
+// stops working after its window; a phone already unlocked stays unlocked.
+// After the second presentation the lock is switched off with
+// GS_SESSION_LOCK_ENABLED = false (branch release/no-code).
+const GS_SESSION_LOCK_ENABLED = true;
+const GS_UNLOCK_KEY = "om-session-unlock";
+const GS_SESSION_CODES = [
+  { id: "tester",
+    sha256: "f8b4b02c09cf57b204db3b18aa763786d15574ec0824e3639e10afc54990d52d", djb2: "7c5403cd" },
+  { id: "session1", from: [2026, 12, 5, 12, 30], to: [2026, 12, 5, 15, 30],
+    sha256: "24a63ec7c93bdbb5b5dea931017f958545ef99af8d6f09a8260115a2a1c976cf", djb2: "7c526605" },
+  { id: "session2", from: [2026, 12, 5, 15, 0], to: [2026, 12, 5, 18, 30],
+    sha256: "4b3d0e48caf0f1eef87000c663d60d0a880d65475b9440a1b7c2a8bc0ae15c2f", djb2: "7c57d16b" }
+];
 
 function gsIsUnlocked() {
-  try { return sessionStorage.getItem(GS_UNLOCK_KEY) === "true"; } catch (error) { return true; }
+  if (!GS_SESSION_LOCK_ENABLED) return true;
+  try { return Boolean(localStorage.getItem(GS_UNLOCK_KEY)); } catch (error) { return true; }
 }
 
-function gsSetUnlocked() {
-  try { sessionStorage.setItem(GS_UNLOCK_KEY, "true"); } catch (error) { /* unlocked for this run anyway */ }
-  // An older install may still carry build 16/17's permanent flag; it no
-  // longer counts, and it is cleared so nothing reads it by mistake.
-  try { localStorage.removeItem("om-unlocked"); localStorage.removeItem("om-lock-seen"); } catch (error) { /* ignore */ }
+function gsSetUnlocked(codeId = "tester") {
+  try {
+    localStorage.setItem(GS_UNLOCK_KEY, JSON.stringify({ code: codeId, at: new Date().toISOString() }));
+  } catch (error) { /* unlocked for this run anyway */ }
+  try {
+    localStorage.removeItem("om-unlocked");
+    localStorage.removeItem("om-lock-seen");
+    sessionStorage.removeItem("gs-session-unlocked");
+  } catch (error) { /* ignore */ }
 }
 
 function gsDjb2(text) {
@@ -191,21 +217,40 @@ function gsDjb2(text) {
   return h.toString(16);
 }
 
-async function gsCodeMatches(raw) {
+function gsLocalTime(parts) {
+  const [y, mo, d, h, mi] = parts;
+  return new Date(y, mo - 1, d, h, mi).getTime();
+}
+
+/* Which code was typed, and whether it may unlock now.
+ * Returns { id, ok, reason } with reason "early" / "late" outside a window,
+ * or null when the code matches none of them. */
+async function gsCodeCheck(raw, now = Date.now()) {
   const code = String(raw || "").replace(/\s+/g, "");
-  if (!code) return false;
+  if (!code) return null;
+  let hex = null;
   try {
     if (window.crypto?.subtle && window.isSecureContext) {
       const buf = await window.crypto.subtle.digest("SHA-256", new TextEncoder().encode(code));
-      const hex = [...new Uint8Array(buf)].map((b) => b.toString(16).padStart(2, "0")).join("");
-      return hex === GS_SESSION_CODE_SHA256;
+      hex = [...new Uint8Array(buf)].map((b) => b.toString(16).padStart(2, "0")).join("");
     }
   } catch (error) {
-    /* fall through to the small hash */
+    hex = null;
   }
-  return gsDjb2(code) === GS_SESSION_CODE_FALLBACK;
+  const small = hex ? null : gsDjb2(code);
+  const hit = GS_SESSION_CODES.find((c) => (hex ? c.sha256 === hex : c.djb2 === small));
+  if (!hit) return null;
+  if (hit.from && now < gsLocalTime(hit.from)) return { id: hit.id, ok: false, reason: "early" };
+  if (hit.to && now > gsLocalTime(hit.to)) return { id: hit.id, ok: false, reason: "late" };
+  return { id: hit.id, ok: true };
 }
 
+async function gsCodeMatches(raw) {
+  const result = await gsCodeCheck(raw);
+  return Boolean(result && result.ok);
+}
+
+const GS_CODE_OUTSIDE = "That session code works only during its session. Ask Azizul Haque or your O&M specialist for help.";
 const GS_CODE_WRONG = "That code did not match. Ask Azizul Haque or your O&M specialist for the session code.";
 
 /* The two places the code can be typed: the pop-up at start, and the card
@@ -262,12 +307,13 @@ async function gsSessionCodeSubmit(which = "card") {
     input?.focus();
     return;
   }
-  if (!(await gsCodeMatches(value))) {
-    gsSessionCodeNote(GS_CODE_WRONG, "warn", which);
+  const result = await gsCodeCheck(value, typeof window.__gsNow === "number" ? window.__gsNow : Date.now());
+  if (!result || !result.ok) {
+    gsSessionCodeNote(result ? GS_CODE_OUTSIDE : GS_CODE_WRONG, "warn", which);
     if (input) { input.select?.(); input.focus(); }
     return;
   }
-  gsSetUnlocked();
+  gsSetUnlocked(result.id);
   ["card", "modal"].forEach((w) => { const f = gsCodeField(w); if (f.input) f.input.value = ""; });
   gsCloseSessionCodeModal();
   gsRenderHome();
@@ -1137,7 +1183,7 @@ function gsBindShell() {
       unlockPageScroll();
       setMainContentInert(false);
     }
-    // First run: the sound tutorial, then the session code (build 18).
+    // First run: the sound tutorial, then the session code until it has been entered once.
     if (!gsIsUnlocked()) {
       setTimeout(() => gsShowSessionCodeModal("Enter your session code to start practicing."), 300);
       return;
@@ -1240,7 +1286,7 @@ function gsBoot() {
   } else if (!localStorage.getItem(GS_TUTORIAL_KEY)) {
     setTimeout(() => gsRunTutorial(), 700);
   } else if (!gsIsUnlocked()) {
-    // Every start asks for the session code (build 18).
+    // Still locked: ask for the session code (it is entered only once, build 19).
     setTimeout(() => gsShowSessionCodeModal("Enter your session code to start practicing."), 400);
   } else if (typeof offerOpenInApp === "function") {
     offerOpenInApp();
