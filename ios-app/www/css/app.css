@@ -2185,8 +2185,6 @@ h2.safety-note-title { font-size: 1rem; margin: 0; }
 .progress-sentence { display: flex; flex-direction: column; gap: 3px; margin: 0; font: inherit; }
 .progress-grid { list-style: none; padding: 0; margin: 0 0 14px; }
 /* Show to my instructor: the code fills the width, on white for any camera. */
-.qr-code { background: #fff; padding: 12px; border-radius: 12px; display: grid; place-items: center; }
-.qr-code svg { width: min(100%, 360px); height: auto; display: block; }
 .report-actions { display: flex; flex-direction: column; gap: 8px; }
 .report-actions .settings-action { width: 100%; }
 

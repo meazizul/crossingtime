@@ -141,8 +141,7 @@ The history of the project, from the first prototype to today, is in
 ├── ios-app/                  ← THE CURRENT APP. Work here.
 │   ├── www/index.html          Markup. No build step, no framework
 │   ├── www/css/app.css         Styles, themes, large-text reflow
-│   ├── www/js/                 store.js, engine.js, history.js, features.js, comparison.js, signal.js, app.js
-│   ├── www/js/vendor/          qrcode.js (MIT, Kazuhiko Arase) for "Show to my instructor"
+│   ├── www/js/                 store.js, engine.js, history.js, features.js, students.js, comparison.js, signal.js, app.js
 │   ├── www/manifest.webmanifest, www/sw.js, www/icons/
 │   ├── tests/                  Playwright browser tests (`npm test`)
 │   ├── ios/                    Native iOS project (Capacitor)
@@ -219,5 +218,6 @@ constrained accordingly:
 
 ## License and credits
 
-ISC. Origins and collaborators: [`NOTICE.md`](NOTICE.md). The QR code library
-in `ios-app/www/js/vendor/qrcode.js` is MIT-licensed (Kazuhiko Arase).
+ISC. Origins and collaborators: [`NOTICE.md`](NOTICE.md). Builds 14 to 19
+included a QR code library (MIT, Kazuhiko Arase) for "Show to my instructor";
+build 20 removed that feature and the library.

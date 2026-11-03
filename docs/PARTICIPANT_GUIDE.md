@@ -265,12 +265,16 @@ iPhone. Apple does not allow it there.
 helps if you are still learning VoiceOver or TalkBack. You can choose a slower
 or faster speaking rate.
 
-**Say "Replay" before each replay** and **Describe the sounds in words.** Both
-are on for everyone. The app says "Replay" before every replay, says whether
-you were right after the right-or-wrong sound, and describes each replay in
-words when it is over. Never a number of seconds. If you use VoiceOver or
-TalkBack, your screen reader reads these words. Turn either off here if you
-prefer the sounds alone.
+**How much the app says.** Choose High, Medium or Low, as on a screen
+reader. Medium is the start. High also tells you what is on each screen when
+it opens. Low says only the basics, for when you know the app well.
+
+**Say "Replay" before each replay** and **Announce results and describe the
+sounds.** At Medium and High both are on. The app says "Replay" before every
+replay, says whether you were right after the right-or-wrong sound, and
+describes each replay in words when it is over. Never a number of seconds. If
+you use VoiceOver or TalkBack, your screen reader reads these words. Turn
+either off here if you prefer the sounds alone.
 
 **Colors.** Choose light, dark, or yellow-on-black. There is also a
 high-contrast setting.

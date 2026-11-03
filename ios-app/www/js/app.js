@@ -31,8 +31,8 @@ let gsCurrentScreen = "home";
  * and CACHE_VERSION (sw.js). In the native app the real bundle values are
  * read from the App plugin and override these. */
 const GS_APP_VERSION = "1.0";
-const GS_APP_BUILD = "19";
-const GS_APP_DATE = "2 November 2026";
+const GS_APP_BUILD = "20";
+const GS_APP_DATE = "3 November 2026";
 
 async function gsRenderAbout() {
   const el = document.getElementById("aboutVersion");
@@ -94,8 +94,36 @@ function gsLabelSections() {
 
 /* What self-voicing says on arrival at each screen. */
 function gsScreenIntro(name) {
+  // Low verbosity: the name of the screen only (build 20).
+  if (a11ySettings.verbosity === "low") return GS_SCREEN_TITLES[name] || "";
   const intro = document.querySelector(`#screen-${name} .screen-intro`);
   return [GS_SCREEN_TITLES[name], intro ? intro.textContent.trim() : ""].filter(Boolean).join(". ");
+}
+
+/* High verbosity (build 20): what is on a screen, in the order it is laid
+ * out: the section headings, then the buttons. Read from the page itself, so
+ * it always matches what is shown. */
+function gsVisible(el) {
+  if (!el || el.hidden || el.closest("[hidden]")) return false;
+  const style = window.getComputedStyle(el);
+  return style.display !== "none" && style.visibility !== "hidden";
+}
+
+function gsScreenLayout(name) {
+  const screen = document.getElementById(`screen-${name}`);
+  if (!screen) return "";
+  const clean = (text) => String(text || "").replace(/\s+/g, " ").trim().replace(/[.:]$/, "");
+  const headings = [...screen.querySelectorAll("h2, h3")].filter(gsVisible).map((h) => clean(h.textContent)).filter(Boolean);
+  const buttons = [...screen.querySelectorAll("button, a.settings-action")]
+    .filter(gsVisible)
+    .map((b) => clean(b.getAttribute("aria-label") || b.textContent))
+    .filter(Boolean);
+  const unique = (list) => [...new Set(list)];
+  const parts = [];
+  if (headings.length) parts.push(`Sections: ${unique(headings).slice(0, 8).join(", ")}.`);
+  const shown = unique(buttons);
+  if (shown.length) parts.push(`Buttons: ${shown.slice(0, 10).join(", ")}${shown.length > 10 ? `, and ${shown.length - 10} more` : ""}.`);
+  return parts.length ? `On this screen. ${parts.join(" ")}` : "";
 }
 
 function gsShowScreen(name) {
@@ -138,6 +166,7 @@ function gsShowScreen(name) {
   if (name === "instructor") {
     if (typeof gsRenderInstructorFeatures === "function") gsRenderInstructorFeatures();
     if (typeof gsRenderInstructorLock === "function") gsRenderInstructorLock();
+    if (typeof gsRenderStudents === "function") gsRenderStudents();
   }
   if (name === "shortcuts") gsRenderShortcuts();
   gsRenderSafetyNotes();
@@ -148,7 +177,14 @@ function gsShowScreen(name) {
   if (title) title.focus({ preventScroll: true });
   window.scrollTo(0, 0);
 
-  if (a11ySettings.selfVoice && name !== "home") gsSpeak(gsScreenIntro(name));
+  if (a11ySettings.selfVoice && name !== "home") {
+    const layout = a11ySettings.verbosity === "high" ? gsScreenLayout(name) : "";
+    gsSpeak([gsScreenIntro(name), layout].filter(Boolean).join(" "));
+  } else if (a11ySettings.verbosity === "high" && typeof gsScreenReaderOn === "function" && gsScreenReaderOn()) {
+    // With VoiceOver or TalkBack, after the heading has been read.
+    const layout = gsScreenLayout(name);
+    if (layout) setTimeout(() => { if (gsCurrentScreen === name) announceScreenReader(layout, { speak: false }); }, 1500);
+  }
   if (wantedLocked) gsSessionCodeAsk();
 }
 
@@ -400,6 +436,7 @@ function gsHasTimes() {
 }
 
 function gsRenderHome() {
+  if (typeof gsRenderStudentLine === "function") gsRenderStudentLine();
   const locked = gsRenderLock();
   const ready = gsHasTimes() && !locked;
   const banner = document.getElementById("homeSetupBanner");
@@ -686,7 +723,10 @@ function gsRenderProgress() {
  * ============================================================ */
 
 function gsReportText() {
-  return gsBuildReport({ clientCode: typeof getClientCode === "function" ? getClientCode() : "" });
+  return gsBuildReport({
+    clientCode: typeof getClientCode === "function" ? getClientCode() : "",
+    started: typeof gsStudentStarted === "function" ? gsStudentStarted() : ""
+  });
 }
 
 function gsReportSubject() {
@@ -697,10 +737,11 @@ function gsReportSubject() {
 /*
  * Only ways that can work are offered (Cindi, Oct 18 2026; tracker 12.38,
  * F4): "Text to my instructor" always (Messages opens with the report, and
- * the instructor's number when the setup has one); "Show to my instructor"
- * always (the report as a QR code the instructor scans in person); "Email to
+ * the instructor's number when the setup has one); "Email to
  * my instructor" only when an email is set up and a mail app can open; the
- * share menu stays for anything else.
+ * share menu stays for anything else. Builds 14-19 also had "Show to my
+ * instructor", the report as QR codes; removed in build 20 at Cindi's request
+ * (1 Nov 2026): a long report needed many codes and nothing joined them again.
  */
 let gsMailAvailable = null;   // null = not checked yet (web, Android: assumed possible)
 
@@ -755,7 +796,6 @@ function gsCloseReport() {
   if (wrap) wrap.hidden = true;
   const show = document.getElementById("sendReportBtn");
   if (show) show.hidden = false;
-  gsCloseQr();
   show?.focus({ preventScroll: true });
 }
 
@@ -809,7 +849,7 @@ async function gsEmailReport() {
   const box = document.getElementById("reportPreview");
   if (!box || !box.value) gsPreviewReport();
   const body = document.getElementById("reportPreview").value;
-  const cannot = "No mail app is set up on this phone. Use Text to my instructor, or Show to my instructor.";
+  const cannot = "No mail app is set up on this phone. Use Text to my instructor, or Send with another app.";
   const available = await gsCheckMailAvailable();
   if (available === false) {
     gsMailAvailable = false;
@@ -848,61 +888,6 @@ async function gsExportCsv() {
     failed: "Could not export. Use Copy report instead."
   };
   gsReportNote(messages[outcome] || messages.failed);
-}
-
-/* ---------------- Show to my instructor: the report as QR codes (F4) ---------------- */
-
-const gsQrState = { chunks: [], index: 0 };
-const GS_QR_CHUNK = 900;   // bytes per code: scans easily on a phone screen
-
-function gsQrChunks(text) {
-  const bytes = new TextEncoder().encode(text);
-  const chunks = [];
-  for (let i = 0; i < bytes.length; i += GS_QR_CHUNK) chunks.push(new TextDecoder().decode(bytes.slice(i, i + GS_QR_CHUNK)));
-  return chunks.length ? chunks : [""];
-}
-
-function gsRenderQr() {
-  const holder = document.getElementById("qrCode");
-  const count = document.getElementById("qrCount");
-  const prev = document.getElementById("qrPrevBtn");
-  const next = document.getElementById("qrNextBtn");
-  if (!holder || typeof qrcode !== "function") return;
-  const total = gsQrState.chunks.length;
-  const i = gsQrState.index;
-  const payload = total > 1 ? `GS ${i + 1}/${total}\n${gsQrState.chunks[i]}` : gsQrState.chunks[i];
-  const qr = qrcode(0, "M");
-  qr.addData(payload, "Byte");
-  qr.make();
-  holder.innerHTML = qr.createSvgTag({ cellSize: 4, margin: 2, scalable: true });
-  holder.querySelector("svg")?.setAttribute("aria-hidden", "true");
-  if (count) count.textContent = total > 1 ? `Code ${i + 1} of ${total}. Have your instructor scan each one in turn.` : "One code holds the whole report.";
-  if (prev) prev.hidden = total <= 1;
-  if (next) next.hidden = total <= 1;
-  if (prev) gsSetBusy(prev, i === 0);
-  if (next) gsSetBusy(next, i >= total - 1);
-}
-
-function gsShowQr() {
-  const dialog = document.getElementById("qrModal");
-  if (!dialog || typeof dialog.showModal !== "function") return;
-  // The compact data (F3), not the prose: a long report will not fit one code.
-  const code = typeof getClientCode === "function" ? getClientCode() : "";
-  gsQrState.chunks = gsQrChunks(gsBuildCsv({ clientCode: code }));
-  gsQrState.index = 0;
-  gsRenderQr();
-  if (!dialog.open) {
-    lockPageScroll();
-    setMainContentInert(true);
-    dialog.showModal();
-  }
-  document.getElementById("qrTitle")?.focus();
-  announceScreenReader("Your report is on the screen as a code. Hold the phone still so your instructor can scan it with their camera. Nothing is sent.");
-}
-
-function gsCloseQr() {
-  const dialog = document.getElementById("qrModal");
-  if (dialog?.open) dialog.close();
 }
 
 /*
@@ -1148,7 +1133,6 @@ function gsBindShell() {
   document.getElementById("copyReportBtn")?.addEventListener("click", gsCopyReport);
   document.getElementById("emailReportBtn")?.addEventListener("click", gsEmailReport);
   document.getElementById("textReportBtn")?.addEventListener("click", gsTextReport);
-  document.getElementById("showQrBtn")?.addEventListener("click", gsShowQr);
   document.getElementById("csvReportBtn")?.addEventListener("click", gsExportCsv);
   document.getElementById("clearDataBtn")?.addEventListener("click", gsClearData);
   document.getElementById("cancelDeleteHistoryBtn")?.addEventListener("click", gsCloseDeleteHistory);
@@ -1161,16 +1145,6 @@ function gsBindShell() {
     document.getElementById("clearDataBtn")?.focus({ preventScroll: true });
   });
   gsRenderDataPlace();
-  document.getElementById("closeQr")?.addEventListener("click", gsCloseQr);
-  document.getElementById("qrPrevBtn")?.addEventListener("click", () => { if (gsQrState.index > 0) { gsQrState.index -= 1; gsRenderQr(); } });
-  document.getElementById("qrNextBtn")?.addEventListener("click", () => { if (gsQrState.index < gsQrState.chunks.length - 1) { gsQrState.index += 1; gsRenderQr(); } });
-  document.getElementById("qrModal")?.addEventListener("close", () => {
-    if (!gsAnyDialogOpen()) {
-      unlockPageScroll();
-      setMainContentInert(false);
-    }
-    document.getElementById("showQrBtn")?.focus({ preventScroll: true });
-  });
   // A failed save is said at once, wherever the student is (tracker 12.40).
   window.gsOnHistorySaveFailed = () => announceScreenReader("Your practice could not be saved on this phone. Free some space, or send a report now.");
 

@@ -8,6 +8,39 @@ than commit history. They are accurate to the day.
 
 ---
 
+## 2026-11-03 (build 20) — verbosity levels, several students on one phone, no QR codes
+
+All from Cindi Lashinsky's notes of 1 November 2026.
+
+- **How much the app says (verbosity).** Accessibility, Speech, has High,
+  Medium and Low, as screen readers do. Medium is what builds 15 to 19 did and
+  stays the default. High also says what is on each screen when it opens (its
+  sections and buttons, read from the screen itself). Low says only the basics:
+  a screen's name, no "Replay" before replays and no words after the sounds;
+  the result still shows and is read in its short form. "Say Replay before
+  each replay" and "Announce results and describe the sounds" are switches of
+  their own under it: a level sets both, and each can then be changed alone.
+  The levels apply to the app's own voice and to VoiceOver or TalkBack.
+- **No separate visual replay switch.** The on-screen replay follows the
+  feedback mode (Audio + Visual or Visual only), as it already did when the
+  mode changed; an old "off" from an earlier build no longer hides it.
+- **Several students on one phone.** Instructor setup starts with Students on
+  this phone. Add a student takes a code (never a name) and the date started
+  (today on the phone's clock, editable); the practice already on the phone
+  stays with the first student. Choosing a student starts the app again with
+  that student's crossing times, settings and history; Home names the student
+  and the report gives the code and the date started. Remove student offers to
+  export the report first and asks to confirm. Accessibility settings and the
+  instructor's own details stay with the phone. Each student is in the durable
+  copy and the phone's backup.
+- **No QR codes.** "Show to my instructor" is gone, with its library: a long
+  report needed many codes and nothing joined them again. Text, email, the
+  share menu and the CSV file stay.
+- **Privacy policy:** no longer calls the app a research tool; says that with
+  backup off or iCloud and Google not available nothing changes in the app;
+  covers several students; no QR code. The backup itself was already the
+  phone's own iCloud or Google backup.
+
 ## 2026-11-02 (build 19) — the session code is entered once; one code per presentation
 
 - **Entered once, then the phone stays unlocked.** Build 18 asked on every

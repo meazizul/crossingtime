@@ -243,6 +243,18 @@ Fresh install (or clear the app's data). Open the app.
 - [ ] A double tap on plain text never zooms the page (iPhone and Android)
 - [ ] Help, About says CrossingTime and build 19
 
+### D9 — Verbosity and several students (build 20)
+
+**Pass:**
+- [ ] Accessibility, Speech: **How much the app says** is Medium; the two switches under it are on
+- [ ] Low turns both off; with Speak directions aloud on, a screen says only its name; the result of a try is still shown and read in short
+- [ ] High turns both on; with Speak directions aloud on (or VoiceOver on), a screen also says "On this screen. Sections: … Buttons: …"
+- [ ] There is no "Synchronized visual replay" switch; with Audio + Visual the replay is shown on the screen
+- [ ] Instructor setup starts with **Students on this phone**. **Add a student**: the date is today; a code is required and must be new; after Add the app starts again as that student, with no times and no history, and Home says "Student: …"
+- [ ] Choosing the first student brings back its times and history
+- [ ] **Remove student** offers **Export the report first**, Cancel and Remove student; Remove deletes only that student
+- [ ] Force-quit after switching and reopen: the same student is shown, with their data
+
 ### D7 — The replay said and shown (build 15)
 VoiceOver and TalkBack **off**. Run a practice try, a Comparison preparation
 try, a Comparison practice trial (answer wrong on purpose) and one vehicle At
@@ -449,7 +461,7 @@ Progress → **Show my report to send**.
 - [ ] The report starts with "Student code: …", gives the crossing times and margin, and contains no name
 - [ ] Every line gives the times in seconds with the time of day; a try with "how much" is one line; cancelled tries say "cancelled (not scored)"
 - [ ] **Text to my instructor** opens Messages with the report, addressed to the number from Instructor setup when one is set
-- [ ] **Show to my instructor** shows one or more QR codes that another phone's camera reads; Next and Previous move between codes
+- [ ] There is no **Show to my instructor** button and no QR code anywhere (build 20)
 - [ ] **Email to my instructor** appears only when an instructor email is set and a mail app can open; with no mail app the note says so
 - [ ] **Export for Excel (CSV file)** shares (phone) or downloads (browser) a file that opens one try per row
 - [ ] **Delete all my practice history** opens a warning first (nothing is deleted on the tap); Cancel, Escape and Back delete nothing and focus returns to the button; **Delete history** empties the history, keeps settings and crossing times, and says where it was deleted from (build 15, tracker 14.2)

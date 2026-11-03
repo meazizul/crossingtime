@@ -1,9 +1,10 @@
 # CrossingTime — Privacy Policy
 
-_Last updated: 27 October 2026_
+_Last updated: 3 November 2026_
 
-CrossingTime (formerly CrossingTime) is a research tool from Stevens Institute of Technology that helps
-blind, low-vision and DeafBlind travelers build an intuitive sense of how long
+CrossingTime (formerly Gap Sense) is a free practice app, made at Stevens
+Institute of Technology with O&M Specialists, that helps blind, low-vision and
+DeafBlind travelers build an intuitive sense of how long
 a street crossing takes, using sound and vibration rather than numbers.
 
 ## What the app collects
@@ -17,8 +18,8 @@ never reaches the people who make the app, or anyone else.
 - **On your phone.** Your settings and practice history (margin, cue
   preferences, and the timings you record) are kept in the app's storage on
   your phone.
-- **In your phone's own backup, if it is on.** Like other apps' data, Gap
-  Sense's data is included when your phone backs itself up to your own
+- **In your phone's own backup, if it is on.** Like other apps' data,
+  CrossingTime's data is included when your phone backs itself up to your own
   account:
   - **iPhone:** iCloud Backup (Settings, then your name, then iCloud, then
     iCloud Backup).
@@ -27,7 +28,9 @@ never reaches the people who make the app, or anyone else.
     pattern or password on Android 9 and later.
 
   The backup is kept by Apple or Google in your account. Only you can use it,
-  to restore your phone. The people who make CrossingTime cannot see it.
+  to restore your phone, or to move to a new phone. The people who make
+  CrossingTime cannot see it. If backup is off, or iCloud or Google is not
+  available, nothing changes in the app: your data simply stays on the phone.
 - **Web version.** Kept only in the browser on that device.
 - **No microphone.** The app does not use the microphone at all, and does not
   ask for access to it.
@@ -37,14 +40,17 @@ never reaches the people who make the app, or anyone else.
   They appear in the setup link an instructor shares, and the code appears at
   the top of the practice report, so that nothing needs a name. The app never
   stores or sends a name.
+- **Several students on one phone.** Instructor setup can keep several
+  students apart on one phone, each under a short student code and the date
+  they started. Their data is kept in the same way as above, on the phone and
+  in its backup. Removing a student deletes that student's data from the
+  phone.
 - **Sending a report or a setup link.** Nothing is sent automatically. When you
   choose to send, the app shows you the report first, then does only what you
   pick: opens Messages with the report (addressed to the instructor's number
-  when one is set), opens your mail app, hands the report or a spreadsheet
-  file to your phone's share menu, or shows the report on your screen as a
-  code for the instructor to scan in person. In every case it goes only where
-  you send it, and the code is read only by the camera that scans it. Nothing
-  passes through any CrossingTime server; there is none.
+  when one is set), opens your mail app, or hands the report or a spreadsheet
+  file to your phone's share menu. In every case it goes only where you send
+  it. Nothing passes through any CrossingTime server; there is none.
 
 ## Deleting your data
 
@@ -75,5 +81,5 @@ updated date.
 
 ## Contact
 
-Questions about this policy or the research: open an issue at
+Questions about this policy: open an issue at
 <https://github.com/meazizul/crossingtime/issues>.

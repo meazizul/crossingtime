@@ -188,10 +188,6 @@ Under it, the ways to send:
 
 - **Text to my instructor** opens Messages with the report filled in, and the
   instructor's number when the setup has one.
-- **Show to my instructor** puts the report on your screen as a code (one or
-  several, in turn) that the instructor scans with their own phone's camera.
-  No email, no texting, no account: the report goes straight from your screen
-  to their phone.
 - **Email to my instructor** appears only when an instructor email is set and
   a mail app can open on this phone. If no mail app opens, the app says so and
   points to the other ways.
@@ -265,6 +261,28 @@ zero margin. The same check applies to setup links.
 
 "Student chooses" puts a switch on the student's screen. "On" or "off" hides it,
 with a short note saying the instructor set it.
+
+### Students on this phone (build 20)
+For students who practice on the instructor's phone (Cindi Lashinsky, 1
+November 2026). It is the first section of Instructor setup.
+
+- With one student nothing changes. **Add a student** asks for a **student
+  code** (letters and digits, up to 8, never a name) and the **date started**
+  (today on the phone's clock, editable). The practice already on the phone
+  stays with the first student, under the code it had.
+- **Student** lists every student by code. Choosing one starts the app again
+  with that student's crossing times, margin, activities, sounds and practice
+  history. Home then says "Student: AB12". The report gives the code and the
+  date started.
+- **Remove student** opens a warning that offers **Export the report first
+  (CSV file)**, then Cancel or Remove student. Removing deletes only that
+  student; the next one in the list takes over, and with none left the app is
+  back to one empty student.
+- Accessibility settings stay with the phone, not the student. The instructor
+  code and the instructor's number and email are the instructor's, so they
+  stay too.
+- Every student is kept in the durable copy and the phone's own backup, like
+  the rest (`om-students`, `students.js`).
 
 ### Instructor and student
 
@@ -428,7 +446,8 @@ Open with the person icon, top right.
   environments.
 
 ### The visual replay
-When enabled, the screen goes black during playback and shows:
+With **Audio + Visual** or **Visual only**, the screen goes black during
+playback and shows (there is no separate switch since build 20):
 
 | Element | Meaning |
 |---|---|
@@ -471,11 +490,20 @@ sound is being timed. On iPhone and Android the app speaks through the
 system's own voice (the Android app only since build 15; before that the
 Android web view had no speech engine and said nothing).
 
-**Say "Replay" before each replay** and **Describe the sounds in words** (both
-on by default, build 15) work for everyone, with or without self-voicing: the
-word before every replay, and the result and the replay in words afterwards,
-never a number of seconds. The native apps ask the system whether VoiceOver or
-TalkBack is running and, if so, hand the same words to the screen reader.
+**How much the app says (verbosity)**, build 20, like a screen reader's:
+
+| Level | What the app says |
+|---|---|
+| **High** | Everything at Medium, and when a screen opens, what is on it: its sections and buttons in order. For first-time users |
+| **Medium** (default) | Directions, "Replay" before each replay, the result and the replay in words afterwards. What builds 15 to 19 did |
+| **Low** | The basics: screens say only their name; no "Replay" and no words after the sounds. The result still shows and is read in its short form |
+
+**Say "Replay" before each replay** and **Announce results and describe the
+sounds** (on by default, build 15) are the two parts that slow a practised
+user down. Choosing a level sets both; each can then be changed on its own.
+They work with or without self-voicing, never with a number of seconds. The
+native apps ask the system whether VoiceOver or TalkBack is running and, if
+so, hand the same words to the screen reader.
 
 ### Screen reader
 **Announce cues** controls spoken feedback. Prompts and results are spoken
@@ -505,8 +533,10 @@ before attempting it. There is one per mode.
 Everything persists on the device in `localStorage` under `om-*` keys, with a
 durable copy in the phone's native storage (`store.js`, build 14). Both are
 included in the phone's own backup (iCloud Backup, Android Backup) when it is
-on. There is no app account and no server. Clearing browser data resets the web
-version; deleting the app removes its data from the phone.
+on; if backup is off or iCloud or Google is not available, nothing changes in
+the app. A new phone restored from that backup gets the data back. There is no
+app account and no server. Clearing browser data resets the web version;
+deleting the app removes its data from the phone.
 
 **Delete all my practice history** (Progress, My data; build 15, tracker 14.2
 and 14.4) opens a confirmation dialog first: Cancel comes before Delete

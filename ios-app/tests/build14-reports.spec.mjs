@@ -116,28 +116,17 @@ test("F4: the instructor's number travels in the setup link and is validated", a
   expect(await page.evaluate(() => isValidPhone(""))).toBe(true);
 });
 
-test("F4: Show to my instructor puts the report on screen as QR codes the camera can read, and sends nothing", async ({ page }) => {
+test("F4 (build 20): the report is no longer shown as QR codes; text, email, file and share stay", async ({ page }) => {
+  // Cindi, 1 Nov 2026: a long report needed many codes and nothing joined them again.
   await openProgress(page);
   await page.click("#sendReportBtn");
-  await page.click("#showQrBtn");
-  await expect(page.locator("#qrModal")).toBeVisible();
-  await expect(page.locator("#qrTitle")).toBeFocused();
-  expect(await page.locator("#qrCode svg").count()).toBe(1);
-  const size = await page.locator("#qrCode svg").boundingBox();
-  expect(size.width).toBeGreaterThan(200);
-  // The code carries the CSV data (compact), chunked when long.
-  const chunks = await page.evaluate(() => gsQrState.chunks);
-  expect(chunks.join("")).toContain("date,time,student code,build,activity");
-  expect(await page.locator("#qrCount").innerText()).toMatch(/One code holds the whole report|Code 1 of/);
-  // A long history needs several codes, with Next and Previous.
-  await page.evaluate(() => { const big = []; for (let i = 0; i < 60; i += 1) big.push({ time: Date.now() - i * 1000, activity: "compare", street: "full", userSec: 9, refSec: 8, diffSec: 1, correct: true, marginSec: 0.4, answer: "longer", expected: "longer" }); localStorage.setItem("om-attempt-log", JSON.stringify(big)); gsShowQr(); });
-  expect((await page.evaluate(() => gsQrState.chunks)).length).toBeGreaterThan(1);
-  await expect(page.locator("#qrNextBtn")).toBeVisible();
-  await page.click("#qrNextBtn");
-  expect(await page.locator("#qrCount").innerText()).toContain("Code 2 of");
-  await page.click("#closeQr");
-  await expect(page.locator("#qrModal")).toBeHidden();
-  await expect(page.locator("#showQrBtn")).toBeFocused();
+  await expect(page.locator("#showQrBtn")).toHaveCount(0);
+  await expect(page.locator("#qrModal")).toHaveCount(0);
+  expect(await page.evaluate(() => typeof qrcode)).toBe("undefined");
+  await expect(page.locator("#textReportBtn")).toBeVisible();
+  await expect(page.locator("#csvReportBtn")).toBeVisible();
+  await expect(page.locator("#confirmSendReportBtn")).toBeVisible();
+  await expect(page.locator("#screen-progress")).not.toContainText("code to scan");
 });
 
 test("F3: Export for Excel gives a CSV file, one try per row, one value per column", async ({ page }) => {
@@ -171,7 +160,7 @@ test("12.38: Email to my instructor is offered only when a mail app can open; ot
   await page.waitForTimeout(100);
   await expect(page.locator("#emailReportBtn")).toBeHidden();
   await expect(page.locator("#textReportBtn")).toBeVisible();
-  await expect(page.locator("#showQrBtn")).toBeVisible();
+  await expect(page.locator("#confirmSendReportBtn")).toBeVisible();
 });
 
 test("12.38 in a browser: when nothing opens for mailto, the app says no mail app is set up", async ({ page }) => {

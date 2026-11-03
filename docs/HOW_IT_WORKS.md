@@ -312,12 +312,12 @@ telling longer from shorter and tapping out the difference are two skills.
 
 **Show my report to send** shows the report in full first; nothing is sent
 until the person chooses how. Many students, especially older adults, have no
-email, so the first two ways need none: **Text to my instructor** opens
-Messages with the report (and the instructor's number from the setup), and
-**Show to my instructor** puts the report on the screen as a code the
-instructor scans in person, so it goes from one phone to the other with no
-account and no server. Email is offered only when a mail app can open. The
-share menu and a CSV file for Excel are there too. The report lists the actual
+email, so the first way needs none: **Text to my instructor** opens
+Messages with the report (and the instructor's number from the setup). Email
+is offered only when a mail app can open. The share menu and a CSV file for
+Excel are there too. (Builds 14 to 19 could also show the report as QR codes
+to scan; a long report needed many codes and nothing joined them again, so
+build 20 removed it.) The report lists the actual
 times of every try, in seconds, which the app never shows during practice. It
 names the person by a short student code, never a name.
 

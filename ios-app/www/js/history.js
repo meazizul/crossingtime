@@ -624,6 +624,7 @@ function gsBuildReport(options = {}) {
   lines.push("=".repeat(34));
   // A short code, never a name: the report travels by plain email.
   if (options.clientCode) lines.push(`Student code: ${options.clientCode}`);
+  if (options.started) lines.push(`Date started: ${options.started}`);
   lines.push(`Generated: ${new Date().toLocaleString()}`);
   const header = gsReportHeaderTimes();
   if (header) lines.push(header);

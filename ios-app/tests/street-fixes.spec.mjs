@@ -344,7 +344,9 @@ test("Instructor setup, Help and Progress have real section headings and labelle
   await page.evaluate(() => gsShowScreen("instructor"));
   const h2 = page.locator("#screen-instructor h2.setup-heading:visible");
   expect(await h2.count()).toBeGreaterThanOrEqual(8);
-  await expect(h2.first()).toHaveText("Crossing times");
+  // Build 20: the student list comes first, then the crossing times.
+  await expect(h2.first()).toHaveText("Students on this phone");
+  await expect(h2.nth(1)).toHaveText("Crossing times");
   const groups = await page.evaluate(() => [...document.querySelectorAll("#screen-instructor .setup-group")]
     .filter((g) => g.getAttribute("role") === "group" && document.getElementById(g.getAttribute("aria-labelledby") || "")).length);
   expect(groups).toBeGreaterThanOrEqual(8);
