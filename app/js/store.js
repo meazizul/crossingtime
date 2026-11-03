@@ -156,7 +156,9 @@
     // A snapshot with no crossing times and no history is an empty app. It
     // only replaces a copy when the page itself emptied the storage: a wiped
     // web view must not wipe its own backup.
-    const empty = !current.settings["om-full-time"] && !current.settings["om-clear-time"] && (!current.history || current.history === "[]");
+    // A phone with several students (build 20) is never empty: a new student
+    // starts with no times and no history, and must still be saved.
+    const empty = !current.settings["om-full-time"] && !current.settings["om-clear-time"] && (!current.history || current.history === "[]") && !current.settings["om-students"];
     if (empty && !clearedHere) {
       try {
         const copy = await readCopy();
@@ -226,7 +228,7 @@
     // its own defaults (a settings version, say), so "lost" means the keys
     // that matter are gone: the crossing times and the history.
     const historyMissing = !localStorage.getItem(HISTORY_KEY) && copy.history && copy.history !== "[]";
-    const settingsMissing = !localStorage.getItem("om-full-time") && !localStorage.getItem("om-clear-time") && !localStorage.getItem(HISTORY_KEY);
+    const settingsMissing = !localStorage.getItem("om-full-time") && !localStorage.getItem("om-clear-time") && !localStorage.getItem(HISTORY_KEY) && !localStorage.getItem("om-students");
     if (!historyMissing && !settingsMissing) return false;
     let restoredSomething = false;
     if (settingsMissing && copy.settings) {
@@ -272,6 +274,14 @@
      * written to the copy now, not after the wait, and the copy is never
      * restored over it on the next load. Settings stay in the copy. */
     clearHistoryNow() {
+      clearedHere = true;
+      try { sessionStorage.setItem(CLEARED_FLAG, "1"); } catch (error) { /* no session storage */ }
+      return syncNow();
+    },
+    /* Switching or removing a student (build 20): the new state goes to the
+     * copy now, before the app starts again, and is never replaced by the
+     * old copy on the next load. */
+    commitNow() {
       clearedHere = true;
       try { sessionStorage.setItem(CLEARED_FLAG, "1"); } catch (error) { /* no session storage */ }
       return syncNow();

@@ -6,9 +6,10 @@
      *   om-a11y-output-mode, om-a11y-show-banner, om-a11y-flash-action,
      *   om-a11y-vibrate, om-a11y-use-text-labels, om-a11y-theme,
      *   om-a11y-text-size, om-a11y-high-contrast, om-a11y-focus-boost,
-     *   om-a11y-announce-cues, om-a11y-sync-visual-replay,
+     *   om-a11y-announce-cues, (om-a11y-sync-visual-replay until build 19),
      *   om-a11y-outside-visual-variant, om-a11y-user-flash-contrast,
-     *   om-a11y-say-replay, om-a11y-describe-sounds (build 15)
+     *   om-a11y-say-replay, om-a11y-describe-sounds (build 15),
+     *   om-a11y-verbosity (build 20)
      * Cue types: start, marker, replay_start, replay_end,
      *            validation_error, reference_ok, reference_bad
      * ============================================================ */
@@ -40,7 +41,6 @@
     const a11yFlashAction = document.getElementById("a11yFlashAction");
     const a11yVibrate = document.getElementById("a11yVibrate");
     const a11yUseTextLabels = document.getElementById("a11yUseTextLabels");
-    const a11ySyncVisualReplay = document.getElementById("a11ySyncVisualReplay");
     const a11yTheme = document.getElementById("a11yTheme");
     const a11yTextSize = document.getElementById("a11yTextSize");
     const textSizeLandscapeHint = document.getElementById("textSizeLandscapeHint");
@@ -49,6 +49,7 @@
     const a11yAnnounceCues = document.getElementById("a11yAnnounceCues");
     const a11ySelfVoice = document.getElementById("a11ySelfVoice");
     const a11ySayReplay = document.getElementById("a11ySayReplay");
+    const a11yVerbosity = document.getElementById("a11yVerbosity");
     const a11yDescribeSounds = document.getElementById("a11yDescribeSounds");
     const a11ySpeechRate = document.getElementById("a11ySpeechRate");
     const soundTestBtn = document.getElementById("soundTestBtn");
@@ -115,7 +116,6 @@
       a11yFlashAction,
       a11yVibrate,
       a11yUseTextLabels,
-      a11ySyncVisualReplay,
       a11yTheme,
       a11yTextSize,
       a11yHighContrast,
@@ -205,6 +205,7 @@
       // not a screen reader is running. Never a number of seconds.
       sayReplay: true,
       describeSounds: true,
+      verbosity: "medium",
       speechRate: 1
     };
 
@@ -2801,9 +2802,6 @@
       textSizeLandscapeHint.textContent = textSizeLandscapeHint.hidden
         ? ""
         : "At this size, portrait orientation keeps every control reachable.";
-      const visualReplayAvailable = visualOutputEnabled();
-      a11ySyncVisualReplay.disabled = !visualReplayAvailable;
-      if (!visualReplayAvailable) a11ySyncVisualReplay.checked = false;
       syncCueBannerVisibility();
       applyLayoutMode();
       updateNativeStatusBar(resolvedTheme);
@@ -2863,7 +2861,6 @@
       const storedHighContrast = localStorage.getItem("om-a11y-high-contrast");
       const storedFocusBoost = localStorage.getItem("om-a11y-focus-boost");
       const storedAnnounceCues = localStorage.getItem("om-a11y-announce-cues");
-      const storedSyncVisualReplay = localStorage.getItem("om-a11y-sync-visual-replay");
       const storedOutsideVisualVariant = localStorage.getItem("om-a11y-outside-visual-variant");
       const storedUserFlashContrast = localStorage.getItem("om-a11y-user-flash-contrast");
       const storedSelfVoice = localStorage.getItem("om-a11y-self-voice");
@@ -2904,7 +2901,12 @@
       if ([0.8, 1, 1.25].includes(storedSpeechRate)) a11ySettings.speechRate = storedSpeechRate;
       if (storedSayReplay) a11ySettings.sayReplay = storedSayReplay === "true";
       if (storedDescribeSounds) a11ySettings.describeSounds = storedDescribeSounds === "true";
-      if (storedSyncVisualReplay) a11ySettings.syncVisualReplay = storedSyncVisualReplay === "true";
+      const storedVerbosity = localStorage.getItem("om-a11y-verbosity");
+      if (["high", "medium", "low"].includes(storedVerbosity)) a11ySettings.verbosity = storedVerbosity;
+      // No switch since build 20 (Cindi, 1 Nov 2026): the on-screen replay
+      // follows the feedback mode. An old "off" no longer hides it.
+      a11ySettings.syncVisualReplay = true;
+      localStorage.removeItem("om-a11y-sync-visual-replay");
       if (storedOutsideVisualVariant === "up" || storedOutsideVisualVariant === "down") {
         a11ySettings.outsideVisualVariant = storedOutsideVisualVariant;
       }
@@ -2916,7 +2918,6 @@
       a11yFlashAction.checked = a11ySettings.flashAction;
       a11yVibrate.checked = a11ySettings.vibrate;
       a11yUseTextLabels.checked = a11ySettings.useTextLabels;
-      a11ySyncVisualReplay.checked = a11ySettings.syncVisualReplay;
       outsideVisualVariantInputs.forEach((input) => {
         input.checked = input.value === a11ySettings.outsideVisualVariant;
       });
@@ -2932,6 +2933,7 @@
       if (a11ySpeechRate) a11ySpeechRate.value = String(a11ySettings.speechRate);
       if (a11ySayReplay) a11ySayReplay.checked = a11ySettings.sayReplay;
       if (a11yDescribeSounds) a11yDescribeSounds.checked = a11ySettings.describeSounds;
+      if (a11yVerbosity) a11yVerbosity.value = a11ySettings.verbosity;
       applyA11ySettings();
     }
 
@@ -3110,10 +3112,6 @@
       input.addEventListener("change", () => {
         a11ySettings.outputMode = input.value;
         localStorage.setItem("om-a11y-output-mode", input.value);
-        const wantsVisual = a11ySettings.outputMode !== "audio-only";
-        a11ySettings.syncVisualReplay = wantsVisual;
-        a11ySyncVisualReplay.checked = wantsVisual;
-        localStorage.setItem("om-a11y-sync-visual-replay", String(wantsVisual));
         applyA11ySettings();
       });
     });
@@ -3189,6 +3187,23 @@
       gsSpeak("This is the speaking rate.");
     });
 
+    /* Verbosity (build 20, Cindi 1 Nov 2026): High, Medium (what builds 15-19
+     * did, the default) or Low. A level sets the replay word and the
+     * spoken results; each can then be changed on its own. */
+    a11yVerbosity?.addEventListener("change", () => {
+      const level = ["high", "medium", "low"].includes(a11yVerbosity.value) ? a11yVerbosity.value : "medium";
+      a11ySettings.verbosity = level;
+      localStorage.setItem("om-a11y-verbosity", level);
+      const more = level !== "low";
+      a11ySettings.sayReplay = more;
+      a11ySettings.describeSounds = more;
+      localStorage.setItem("om-a11y-say-replay", String(more));
+      localStorage.setItem("om-a11y-describe-sounds", String(more));
+      if (a11ySayReplay) a11ySayReplay.checked = more;
+      if (a11yDescribeSounds) a11yDescribeSounds.checked = more;
+      gsSpeak({ high: "Verbosity high.", medium: "Verbosity medium.", low: "Verbosity low." }[level]);
+    });
+
     a11ySayReplay?.addEventListener("change", () => {
       a11ySettings.sayReplay = a11ySayReplay.checked;
       localStorage.setItem("om-a11y-say-replay", String(a11ySettings.sayReplay));
@@ -3198,7 +3213,7 @@
     a11yDescribeSounds?.addEventListener("change", () => {
       a11ySettings.describeSounds = a11yDescribeSounds.checked;
       localStorage.setItem("om-a11y-describe-sounds", String(a11ySettings.describeSounds));
-      if (a11ySettings.describeSounds) gsSpeak("The app will describe the sounds in words.");
+      if (a11ySettings.describeSounds) gsSpeak("The app will announce results and describe the sounds.");
     });
 
     /*
@@ -3243,12 +3258,6 @@
       } else {
         play();
       }
-    });
-
-    a11ySyncVisualReplay.addEventListener("change", () => {
-      a11ySettings.syncVisualReplay = a11ySyncVisualReplay.checked;
-      localStorage.setItem("om-a11y-sync-visual-replay", String(a11ySettings.syncVisualReplay));
-      if (!a11ySettings.syncVisualReplay) stopVisualReplay();
     });
 
     hapticsTestBtn.addEventListener("click", () => {

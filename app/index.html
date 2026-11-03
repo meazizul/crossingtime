@@ -93,6 +93,7 @@
 
     <!-- ================= HOME ================= -->
     <section id="screen-home" class="screen" aria-labelledby="screenTitle">
+      <p class="field-help home-student" id="homeStudent" role="status" hidden></p>
       <p class="om-guidance" id="homeGuidance">For use under the guidance of an Orientation and Mobility Specialist. It does not replace O&amp;M instruction.</p>
       <p class="setup-required-prompt" id="volumeTip" role="status" hidden>Your phone volume is low. Press the volume up button on the side of the phone.</p>
 
@@ -380,7 +381,7 @@
 
       <section class="card">
         <h2 class="card-label">My report for my instructor</h2>
-        <p class="field-help">Nothing is ever sent automatically. You see the report first, then choose how it reaches your instructor: by text, by showing a code on your screen, by email when you have one, or any other app. It carries your student code, never your name.</p>
+        <p class="field-help">Nothing is ever sent automatically. You see the report first, then choose how it reaches your instructor: by text, by email when you have one, as a spreadsheet file, or with any other app. It carries your student code, never your name.</p>
         <p class="field-help" id="reportRecipient"></p>
         <button class="settings-action primary" id="sendReportBtn" type="button">Show my report to send</button>
         <div id="reportPreviewWrap" hidden>
@@ -389,7 +390,6 @@
           <h3 class="setup-heading">Send it</h3>
           <div class="exemplar-actions report-actions">
             <button class="settings-action primary" id="textReportBtn" type="button">Text to my instructor</button>
-            <button class="settings-action primary" id="showQrBtn" type="button">Show to my instructor (a code to scan)</button>
             <button class="settings-action" id="emailReportBtn" type="button" hidden>Email to my instructor</button>
             <button class="settings-action" id="confirmSendReportBtn" type="button">Send with another app</button>
             <button class="settings-action" id="csvReportBtn" type="button">Export for Excel (CSV file)</button>
@@ -467,6 +467,30 @@
       </section>
 
       <div id="instructorBody" class="setup">
+        <div class="setup-group" id="studentsGroup">
+          <h2 class="setup-heading">Students on this phone</h2>
+          <p class="setup-note">For students who practice on this phone. Each student keeps their own crossing times, settings and practice history. Choose a student and the whole app switches to that student. Accessibility settings stay with the phone.</p>
+          <p class="field-help" id="studentsNone">One student uses this phone. Add a student to keep several apart; the practice already here stays with the first student.</p>
+          <div id="studentPickWrap" hidden>
+            <label for="studentSelect">Student</label>
+            <select id="studentSelect"></select>
+            <label for="studentStarted">Date started</label>
+            <input id="studentStarted" class="text-input" type="date" />
+          </div>
+          <button type="button" class="settings-action" id="addStudentBtn">Add a student</button>
+          <div id="addStudentForm" hidden>
+            <label for="newStudentCode">New student code (letters and digits, up to 8)</label>
+            <input id="newStudentCode" class="text-input" type="text" inputmode="text" autocomplete="off" autocapitalize="characters" spellcheck="false" maxlength="8" />
+            <p class="setup-note">Use a code that cannot be linked to the person, never a name. It is the code on the student's reports.</p>
+            <label for="newStudentStarted">Date started</label>
+            <input id="newStudentStarted" class="text-input" type="date" />
+            <button type="button" class="settings-action primary" id="saveNewStudentBtn">Add and switch to this student</button>
+            <button type="button" class="settings-action" id="cancelNewStudentBtn">Cancel</button>
+          </div>
+          <button type="button" class="settings-action danger" id="removeStudentBtn" hidden>Remove this student</button>
+          <p class="field-help" id="studentsNote" role="status"></p>
+        </div>
+
         <div class="setup-group">
           <h2 class="setup-heading">Crossing times</h2>
           <p class="setup-note">Measured and set by the O&amp;M Specialist. Time at least three crossings and use the longest.</p>
@@ -897,15 +921,22 @@
             Speak directions aloud (for use without VoiceOver or TalkBack)
           </label>
           <p class="setup-note">The app reads its own directions and results out loud. Speech always stops while a sound is being timed.</p>
+          <label for="a11yVerbosity">How much the app says (verbosity)</label>
+          <select id="a11yVerbosity">
+            <option value="high">High: everything, and what is on each screen</option>
+            <option value="medium" selected>Medium: directions, results and replays (default)</option>
+            <option value="low">Low: the basics only</option>
+          </select>
+          <p class="setup-note">Like a screen reader's verbosity. High suits first-time users: each screen is also described when it opens. Low is for users who know the app: no "Replay" before replays and no words after them, and screens say only their name. It applies to the app's own voice and to VoiceOver or TalkBack. Choosing a level sets the two switches below; you can then change each one on its own.</p>
           <label>
             <input type="checkbox" id="a11ySayReplay" />
             Say "Replay" before each replay
           </label>
           <label>
             <input type="checkbox" id="a11yDescribeSounds" />
-            Describe the sounds in words
+            Announce results and describe the sounds
           </label>
-          <p class="setup-note">After the right-or-wrong sound and after each replay, the app says what the sounds were, for example "Correct." or "That was your taps, then the crossing time: within the margin." Never a number of seconds. Both are on for everyone; with VoiceOver or TalkBack on, the screen reader says them.</p>
+          <p class="setup-note">After the right-or-wrong sound and after each replay, the app says what the sounds were, for example "Correct." or "That was your taps, then the crossing time: within the margin." Never a number of seconds. With VoiceOver or TalkBack on, the screen reader says them. When this is off, the result is still shown and read out in its short form.</p>
           <label for="a11ySpeechRate">Speaking rate</label>
           <select id="a11ySpeechRate">
             <option value="0.8">Slower</option>
@@ -919,7 +950,7 @@
           <label><input type="checkbox" id="a11yShowBanner" /> Show on-screen cue banner</label>
           <label><input type="checkbox" id="a11yFlashAction" /> Flash the action button briefly on cue</label>
           <label><input type="checkbox" id="a11yUseTextLabels" /> Use text labels</label>
-          <label><input type="checkbox" id="a11ySyncVisualReplay" /> Synchronized visual replay (AudioContext-timed)</label>
+          <p class="setup-note">With Audio + Visual or Visual only, every replay is also shown on the screen, in step with the sounds.</p>
         </div>
 
         <div class="setup-group">
@@ -1019,6 +1050,24 @@
     </div>
   </dialog>
 
+  <dialog id="removeStudentModal" aria-labelledby="removeStudentTitle" aria-describedby="removeStudentWhat" aria-modal="true">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h2 id="removeStudentTitle" tabindex="-1">Remove this student?</h2>
+      </div>
+      <div class="setup">
+        <div class="setup-group">
+          <p class="field-help" id="removeStudentWhat">This deletes the student's crossing times, settings and practice history from this phone. It cannot be undone.</p>
+          <p class="field-help">To keep their practice, export the report first.</p>
+        </div>
+        <button class="settings-action" type="button" id="exportRemoveStudentBtn">Export the report first (CSV file)</button>
+        <p class="field-help" id="removeStudentNote" role="status"></p>
+        <button class="settings-action primary" type="button" id="cancelRemoveStudentBtn">Cancel</button>
+        <button class="settings-action danger" type="button" id="confirmRemoveStudentBtn">Remove student</button>
+      </div>
+    </div>
+  </dialog>
+
   <dialog id="deleteHistoryModal" aria-labelledby="deleteHistoryTitle" aria-describedby="deleteHistoryText" aria-modal="true">
     <div class="modal-card">
       <div class="modal-header">
@@ -1033,25 +1082,6 @@
         </div>
         <button class="settings-action primary" type="button" id="cancelDeleteHistoryBtn">Cancel</button>
         <button class="settings-action danger" type="button" id="confirmDeleteHistoryBtn">Delete history</button>
-      </div>
-    </div>
-  </dialog>
-
-  <!-- ============ SHOW TO MY INSTRUCTOR: the report as a code ============ -->
-  <dialog id="qrModal" aria-labelledby="qrTitle" aria-modal="true">
-    <div class="modal-card">
-      <div class="modal-header">
-        <h2 id="qrTitle" tabindex="-1">Show this to your instructor</h2>
-        <button class="close-modal" type="button" id="closeQr">Close</button>
-      </div>
-      <div class="setup">
-        <p class="field-help">Your instructor scans it with their phone's camera. The app sends nothing; the report is only on your screen until they scan it.</p>
-        <div class="qr-code" id="qrCode"></div>
-        <p class="field-help" id="qrCount" role="status"></p>
-        <div class="exemplar-actions">
-          <button class="settings-action" type="button" id="qrPrevBtn" hidden>Previous code</button>
-          <button class="settings-action" type="button" id="qrNextBtn" hidden>Next code</button>
-        </div>
       </div>
     </div>
   </dialog>
@@ -1098,10 +1128,10 @@
   <!-- Engine (practice/replay logic), then feature modules, then the shell. -->
   <!-- store.js first: it mirrors every localStorage write and restores lost data. -->
   <script src="js/store.js"></script>
-  <script src="js/vendor/qrcode.js"></script>
   <script src="js/engine.js"></script>
   <script src="js/history.js"></script>
   <script src="js/features.js"></script>
+  <script src="js/students.js"></script>
   <script src="js/comparison.js"></script>
   <script src="js/signal.js"></script>
   <script src="js/app.js"></script>
