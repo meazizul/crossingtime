@@ -155,11 +155,12 @@ test("bug 23: days practiced counts unscored practice; skipped estimates are cou
   await openApp(page);
   await setTimes(page, "4", "8", "0.4");
   const s = await page.evaluate(() => {
-    const day = 24 * 3600 * 1000;
+    // Whole calendar days at noon: 24-hour steps land on the same date across a clock change.
+    const daysAgo = (n) => { const d = new Date(); d.setHours(12, 0, 0, 0); d.setDate(d.getDate() - n); return d.getTime(); };
     const log = [
-      { time: Date.now() - 2 * day, activity: "live", street: "full", judged: false, userSec: 7, refSec: 8, diffSec: -1, correct: false, marginSec: 0.4 },
-      { time: Date.now() - day, activity: "compare", street: "full", userSec: 0, refSec: 2, diffSec: 0, correct: false, marginSec: 0.4, answer: "magnitude", skipped: true, skip: "magnitude" },
-      { time: Date.now(), activity: "compare", street: "full", userSec: 9, refSec: 8, diffSec: 1, correct: true, marginSec: 0.4, answer: "longer", expected: "longer" }
+      { time: daysAgo(2), activity: "live", street: "full", judged: false, userSec: 7, refSec: 8, diffSec: -1, correct: false, marginSec: 0.4 },
+      { time: daysAgo(1), activity: "compare", street: "full", userSec: 0, refSec: 2, diffSec: 0, correct: false, marginSec: 0.4, answer: "magnitude", skipped: true, skip: "magnitude" },
+      { time: daysAgo(0), activity: "compare", street: "full", userSec: 9, refSec: 8, diffSec: 1, correct: true, marginSec: 0.4, answer: "longer", expected: "longer" }
     ];
     localStorage.setItem("om-attempt-log", JSON.stringify(log));
     return gsSummary();
