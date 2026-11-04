@@ -1208,7 +1208,8 @@
         ["liveHowMuch", ["on", "off", "choose"]],
         ["liveReplay", ["always", "errors", "never", "choose"]],
         ["liveConfirm", ["sound", "vibration"]],
-        ["playAgain", ["on", "off", "choose"]]
+        ["playAgain", ["on", "off", "choose"]],
+        ["trafficSide", ["right", "left"]]
       ]
     });
 

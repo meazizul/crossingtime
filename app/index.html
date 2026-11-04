@@ -237,7 +237,7 @@
       <section class="card" aria-labelledby="signalStreetLabel">
         <fieldset class="option-group">
           <legend class="option-group-title" id="signalStreetLabel"><h2 class="legend-heading">Which crossing</h2></legend>
-          <label><input type="radio" name="signalStreet" value="half" checked /> First half (traffic from the left)</label>
+          <label><input type="radio" name="signalStreet" value="half" checked /> First half (traffic from the <span data-near-side>left</span>)</label>
           <label><input type="radio" name="signalStreet" value="full" /> Full street</label>
         </fieldset>
       </section>
@@ -278,7 +278,7 @@
       <section class="card" aria-labelledby="compareStreetLabel">
         <fieldset class="option-group">
           <legend class="option-group-title" id="compareStreetLabel"><h2 class="legend-heading">Which crossing</h2></legend>
-          <label><input type="radio" name="compareStreet" value="half" checked /> First half (traffic from the left)</label>
+          <label><input type="radio" name="compareStreet" value="half" checked /> First half (traffic from the <span data-near-side>left</span>)</label>
           <label><input type="radio" name="compareStreet" value="full" /> Full street</label>
         </fieldset>
       </section>
@@ -439,7 +439,7 @@
         <ul class="plain-list">
           <li><strong>Setting up.</strong> Time at least three crossings and use the longest. Enter the first-half and full-street times in Instructor setup. There you also choose which activities and options the student sees, then send everything to the student's phone as one link.</li>
           <li><strong>Margin of error.</strong> You choose and set it. The app defaults to 0.40 seconds; 0.50 seconds has historically been taught with a stopwatch. There is no research yet on the right value.</li>
-          <li><strong>Directions.</strong> A vehicle approaching from the left is compared with the first-half time; from the right, with the full-street time.</li>
+          <li><strong>Directions.</strong> A vehicle approaching from the <span data-near-side>left</span> is compared with the first-half time; from the <span data-far-side>right</span>, with the full-street time. Where traffic drives on the left, set that in Instructor setup and the two sides swap.</li>
           <li><strong>Feedback modes.</strong> Audio, visual, or both, under Accessibility. Visual-only supports Deaf students; vibration supports DeafBlind students in the installed app.</li>
           <li><strong>Progress.</strong> The student can show you the Progress screen, or send you a written report. Data never leaves their device unless they send it.</li>
           <li><strong>Experimental.</strong> The adaptive margin is off by default and unproven; turn it on in Instructor setup only to try it.</li>
@@ -494,9 +494,15 @@
         <div class="setup-group">
           <h2 class="setup-heading">Crossing times</h2>
           <p class="setup-note">Measured and set by the O&amp;M Specialist. Time at least three crossings and use the longest.</p>
-          <label for="clearTime">First half of the street, traffic from the left (seconds)</label>
+          <label for="ftTrafficSide">Vehicles drive on the</label>
+          <select id="ftTrafficSide" data-feature="trafficSide">
+            <option value="right">Right side of the road (United States, Canada, most of Europe)</option>
+            <option value="left">Left side of the road (United Kingdom, Ireland, Australia, Japan, India…)</option>
+          </select>
+          <p class="setup-note">This decides which side is the first half. Driving on the right, traffic from the left crosses the first half; driving on the left, traffic from the right does. At the street and both comparison activities follow it.</p>
+          <label for="clearTime">First half of the street, traffic from the <span data-near-side>left</span> (seconds)</label>
           <input id="clearTime" type="number" step="0.1" min="0.1" max="600" inputmode="decimal" />
-          <label for="fullTime">Full street, traffic from the right (seconds)</label>
+          <label for="fullTime">Full street, traffic from the <span data-far-side>right</span> (seconds)</label>
           <input id="fullTime" type="number" step="0.1" min="0.1" max="600" inputmode="decimal" />
           <label for="marginInput">Margin of error (seconds)</label>
           <input id="marginInput" type="number" step="0.1" min="0.01" max="60" inputmode="decimal" value="0.4" />

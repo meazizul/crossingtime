@@ -20,9 +20,14 @@
  * chosen student's keys in their place, writes the durable copy at once
  * (store.js) and reloads, so every screen starts from the chosen student.
  *
- * Per student: every om-* key except the phone's own ones below. The
- * accessibility settings (om-a11y-*) stay with the phone: they describe how
- * the phone is being used, and the instructor may use it with VoiceOver.
+ * Per student: every om-* key except the phone's own ones below, the
+ * accessibility settings (om-a11y-*) included. Until build 21 those stayed
+ * with the phone; Cindi, 4 Nov 2026 (tracker 20.5): when the instructor
+ * selects a student, use that student's accessibility preferences. A new
+ * student starts with the accessibility settings in use when they are added,
+ * so nothing on the screen changes under the instructor; they are then
+ * changed for that student alone. Students saved before build 22 get the
+ * phone's settings once (gsStudentsLoad), so nobody's settings disappear.
  * ============================================================ */
 
 const GS_STUDENTS_KEY = "om-students";
@@ -35,14 +40,36 @@ const GS_DEVICE_KEYS = new Set([
 ]);
 
 function gsIsStudentKey(key) {
-  return typeof key === "string" && key.startsWith("om-") && !key.startsWith("om-a11y-") && !GS_DEVICE_KEYS.has(key);
+  return typeof key === "string" && key.startsWith("om-") && !GS_DEVICE_KEYS.has(key);
+}
+
+/* The accessibility settings in use now, to give to a new student. */
+function gsCurrentA11y() {
+  const snap = {};
+  for (let i = 0; i < localStorage.length; i += 1) {
+    const key = localStorage.key(i);
+    if (typeof key === "string" && key.startsWith("om-a11y-")) snap[key] = localStorage.getItem(key);
+  }
+  return snap;
 }
 
 function gsStudentsLoad() {
   try {
     const raw = JSON.parse(localStorage.getItem(GS_STUDENTS_KEY) || "null");
     if (raw && Array.isArray(raw.list) && raw.list.length) {
-      return { active: raw.active, list: raw.list, data: raw.data && typeof raw.data === "object" ? raw.data : {} };
+      const registry = { active: raw.active, list: raw.list, data: raw.data && typeof raw.data === "object" ? raw.data : {} };
+      if (raw.a11y !== 1) {
+        // Saved before build 22, when accessibility stayed with the phone:
+        // every waiting student gets the settings in use now, once.
+        const a11y = gsCurrentA11y();
+        registry.list.forEach((entry) => {
+          if (entry.id === registry.active) return;
+          registry.data[entry.id] = { ...a11y, ...(registry.data[entry.id] || { "om-client-code": entry.code }) };
+        });
+        try { gsStudentsSave(registry); } catch (error) { /* tried again next time */ }
+      }
+      registry.a11y = 1;
+      return registry;
     }
   } catch (error) { /* a damaged registry means one student, as before */ }
   return null;
@@ -50,7 +77,7 @@ function gsStudentsLoad() {
 
 function gsStudentsSave(registry) {
   if (!registry || !registry.list.length) localStorage.removeItem(GS_STUDENTS_KEY);
-  else localStorage.setItem(GS_STUDENTS_KEY, JSON.stringify(registry));
+  else localStorage.setItem(GS_STUDENTS_KEY, JSON.stringify({ ...registry, a11y: 1 }));
 }
 
 const GS_STUDENTS_FULL = "The phone's storage for this app is full, so nothing was changed. Export and remove a student you no longer need, or delete old practice history, then try again.";
@@ -202,7 +229,7 @@ function gsStudentsAdd(rawCode, started) {
   registry.data[registry.active] = gsCaptureStudent();
   registry.active = id;
   delete registry.data[id];
-  const done = gsStudentsTransaction(registry, { "om-client-code": code });
+  const done = gsStudentsTransaction(registry, { ...gsCurrentA11y(), "om-client-code": code });
   return done.ok ? { ok: true, code } : done;
 }
 
@@ -228,7 +255,8 @@ function gsStudentsRemoveActive() {
   registry.list = registry.list.filter((s) => s.id !== registry.active);
   delete registry.data[registry.active];
   const next = registry.list[0] || null;
-  const nextSnap = next ? (registry.data[next.id] || { "om-client-code": next.code }) : {};
+  // With nobody left, the accessibility settings in use stay on the phone.
+  const nextSnap = next ? (registry.data[next.id] || { "om-client-code": next.code }) : gsCurrentA11y();
   if (next) {
     delete registry.data[next.id];
     registry.active = next.id;

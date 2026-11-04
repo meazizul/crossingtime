@@ -38,7 +38,8 @@ const GS_FEATURE_DEFAULTS = Object.freeze({
     liveHowMuch: "choose",        // on | off | choose
     liveReplay: "always",         // always | errors | never | choose
     liveConfirm: "sound",         // sound | vibration  (confirmation of a street gesture)
-    playAgain: "choose"           // on | off | choose  ("Play it again" after a replay, F1)
+    playAgain: "choose",          // on | off | choose  ("Play it again" after a replay, F1)
+    trafficSide: "right"          // right | left: the side of the road vehicles drive on (20.13)
   }
 });
 
@@ -55,7 +56,8 @@ const GS_FEATURE_VALUES = {
   liveHowMuch: ["on", "off", "choose"],
   liveReplay: ["always", "errors", "never", "choose"],
   liveConfirm: ["sound", "vibration"],
-  playAgain: ["on", "off", "choose"]
+  playAgain: ["on", "off", "choose"],
+  trafficSide: ["right", "left"]
 };
 
 const GS_ACTIVITY_IDS = ["practice", "signal", "compare", "live"];
@@ -200,6 +202,35 @@ function gsApplyFeatureVisibility() {
   }
 }
 
+/*
+ * Which side of the street is the first half (Cindi, 4 Nov 2026; tracker
+ * 20.13). Where vehicles drive on the right, the near lane's traffic comes
+ * from the left, so a vehicle from the left is compared with the first half
+ * and one from the right with the full street. Where they drive on the left
+ * (the UK, Australia, Japan…) it is the other way round. One setting in
+ * Instructor setup; nothing for one-way streets (Cindi).
+ */
+function gsNearSide() {
+  return gsFeature("trafficSide") === "left" ? "right" : "left";
+}
+
+function gsFarSide() {
+  return gsNearSide() === "left" ? "right" : "left";
+}
+
+/* "half" for a vehicle from the near side, "full" from the far side. */
+function gsStreetForDirection(direction) {
+  return direction === gsNearSide() ? "half" : "full";
+}
+
+/* Every "from the left / right" in the screens follows the setting. */
+function gsApplyTrafficSide() {
+  const near = gsNearSide();
+  const far = gsFarSide();
+  document.querySelectorAll("[data-near-side]").forEach((el) => { el.textContent = near; });
+  document.querySelectorAll("[data-far-side]").forEach((el) => { el.textContent = far; });
+}
+
 /* ---------------- Instructor screen ---------------- */
 
 function gsRenderInstructorFeatures() {
@@ -251,6 +282,7 @@ function gsBindInstructorFeatures() {
 function gsFeaturesChanged() {
   gsRenderInstructorFeatures();
   gsApplyFeatureVisibility();
+  gsApplyTrafficSide();
   if (typeof gsRenderHome === "function") gsRenderHome();
 }
 
@@ -345,4 +377,5 @@ function gsFeaturesInit() {
   gsRenderInstructorFeatures();
   gsRenderInstructorLock();
   gsApplyFeatureVisibility();
+  gsApplyTrafficSide();
 }
