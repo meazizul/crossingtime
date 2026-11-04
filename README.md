@@ -10,7 +10,7 @@ learns the *feel* of the duration, not a stopwatch reading.
 
 ## Origins
 
-CrossingTime, which was called Gap Sense from August to October 2026, began as a copy of **Cindi Lashinsky's CrossingTime (Streets)
+CrossingTime began as a copy of **Cindi Lashinsky's CrossingTime (Streets)
 repository**, her original proof of concept, and has been refined and expanded
 through ongoing collaboration with her. See [`NOTICE.md`](NOTICE.md).
 

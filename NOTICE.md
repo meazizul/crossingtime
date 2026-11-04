@@ -1,6 +1,6 @@
 # Notice: origins and collaboration
 
-CrossingTime (called Gap Sense from August to October 2026) began as a copy of **Cindi Lashinsky's CrossingTime
+CrossingTime began as a copy of **Cindi Lashinsky's CrossingTime
 (Streets) repository**, her original proof of concept for teaching the timing
 of uncontrolled street crossings. That prototype established the idea at the
 heart of this app: feedback as felt duration, never as a number of seconds.
