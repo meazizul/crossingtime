@@ -81,6 +81,8 @@ function gsSignalStatus(message, tone = "neutral", { announce = true } = {}) {
 }
 
 function gsSignalUpdateButton() {
+  // Awake from Ready until the replay ends (tracker 20.12).
+  if (typeof gsKeepAwakeFor === "function") gsKeepAwakeFor("signal", gsSignalState.phase !== "idle");
   const btn = document.getElementById("signalBtn");
   const label = document.getElementById("signalBtnLabel");
   const hint = document.getElementById("signalBtnHint");
@@ -143,7 +145,7 @@ function gsSignalCancel() {
   if (typeof stopVisualReplay === "function") stopVisualReplay();
 }
 
-function gsSignalPress() {
+function gsSignalPress(atMs) {
   ensureAudioContext();
   const phase = gsSignalState.phase;
 
@@ -191,7 +193,9 @@ function gsSignalPress() {
   }
 
   if (phase === "timing") {
-    const produced = (performance.now() - gsSignalState.signalAt) / 1000;
+    // From the touch, not the lift (tracker 20.9).
+    const pressedAt = Number.isFinite(atMs) ? atMs : performance.now();
+    const produced = Math.max(0, pressedAt - gsSignalState.signalAt) / 1000;
     gsSignalStopTone();
     if (typeof gsHideIntervalVisual === "function") gsHideIntervalVisual();
     hapticCue("marker");
@@ -268,6 +272,7 @@ function gsSignalResolve(producedSec) {
   const params = { producedSec: measuredSec, crossingSec, style: gsSignalState.style, marginSec, within }; // the verdict already given, latency allowance included
   // The replay in words, once it is over (build 15). Never the seconds.
   gsSignalState.lastDescribe = `That was the sample, your stop, and your crossing time: ${gsVerdictWords(within)}.`;
+  gsSignalState.lastVerdict = within ? "Within the margin." : "Outside the margin.";
   const doneAt = gsReplayProduction({ ...params, startDelaySec: 1.0 });
   gsPlayAgainSet("signal", () => gsReplayProduction({ ...params, startDelaySec: 0.5 }));
   gsLater(gsSignalTimers, () => {
@@ -283,7 +288,9 @@ function gsSignalResolve(producedSec) {
 function gsSignalFinishStatus() {
   const message = "Ready for another.";
   const said = Boolean(gsSignalState.lastDescribe) && a11ySettings.describeSounds && gsDescribe(`${gsSignalState.lastDescribe} ${message}`);
-  gsSignalStatus(message, "neutral", { announce: !said });
+  // Off (Low): the verdict still shows and is read, in short (tracker 20.2).
+  const verdict = !said && gsSignalState.lastVerdict ? `${gsSignalState.lastVerdict} ` : "";
+  gsSignalStatus(`${verdict}${message}`, "neutral", { announce: !said });
 }
 
 /* Play it again (F1): the last try's replay once more, not recorded. */
@@ -313,6 +320,16 @@ document.addEventListener("visibilitychange", () => {
   if (gsSignalState.phase === "waiting" || gsSignalState.phase === "timing") {
     gsSignalCancel();
     gsSignalStatus("The app was hidden, so nothing was recorded. Press Ready to try again.", "warn");
+  }
+});
+
+/* The sound was taken away while the student was waiting for it or timing
+ * it (tracker 20.11): nothing is recorded. */
+window.addEventListener("gs-audio-interrupted", () => {
+  if (gsSignalState.phase === "ready" || gsSignalState.phase === "waiting" || gsSignalState.phase === "timing") {
+    gsSignalCancel();
+    if (typeof gsHideIntervalVisual === "function") gsHideIntervalVisual();
+    gsSignalStatus("The sound was interrupted, so nothing was recorded. Press Ready to try again.", "warn");
   }
 });
 
@@ -349,7 +366,7 @@ function gsSignalInit() {
     });
   });
   const btn = document.getElementById("signalBtn");
-  if (btn) btn.addEventListener("click", gsSignalPress);
+  if (btn) btn.addEventListener("click", () => gsSignalPress(gsPressTime(btn)));
   document.getElementById("signalPlayAgainBtn")?.addEventListener("click", gsSignalPlayAgain);
   gsSignalUpdateButton();
   gsSignalRenderScore();

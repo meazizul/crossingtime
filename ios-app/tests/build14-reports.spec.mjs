@@ -144,7 +144,7 @@ test("F3: Export for Excel gives a CSV file, one try per row, one value per colu
   // In a browser the file downloads.
   await page.click("#sendReportBtn");
   const [download] = await Promise.all([page.waitForEvent("download"), page.click("#csvReportBtn")]);
-  expect(download.suggestedFilename()).toMatch(/^gap-sense-report-K7-\d{4}-\d\d-\d\d\.csv$/);
+  expect(download.suggestedFilename()).toMatch(/^crossingtime-report-K7-\d{4}-\d\d-\d\d\.csv$/);
   await expect(page.locator("#reportNote")).toContainText("Downloaded");
 });
 

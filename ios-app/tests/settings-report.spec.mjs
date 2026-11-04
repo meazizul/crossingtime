@@ -265,7 +265,7 @@ test("sending a report: confirm first, then the share sheet; never a name; stree
   await expect(page.locator("#reportNote")).toContainText("Copied");
 });
 
-test("deleting history clears attempts and adaptive lanes", async ({ page }) => {
+test("deleting history clears attempts and adaptive lanes, and keeps the adaptive switch on", async ({ page }) => {
   await openApp(page, { storage: {
     "om-attempt-log": JSON.stringify([{ time: Date.now(), activity: "practice", street: "half", userSec: 4, refSec: 4, diffSec: 0, correct: true, marginSec: 0.4 }]),
     "om-adaptive-margin": JSON.stringify({ enabled: true, lanes: { "practice:half": { margin: 0.2 } } })
@@ -276,7 +276,8 @@ test("deleting history clears attempts and adaptive lanes", async ({ page }) => 
   // Build 15 (14.2): the button opens the warning; only Delete history deletes.
   await page.click("#confirmDeleteHistoryBtn");
   expect(await history(page)).toEqual([]);
-  expect(await page.evaluate(() => localStorage.getItem("om-adaptive-margin"))).toBeNull();
+  // Tracker 20.8: the lanes go back to the instructor's margin, the switch stays on.
+  expect(await page.evaluate(() => JSON.parse(localStorage.getItem("om-adaptive-margin")))).toEqual({ enabled: true, lanes: {} });
   await expect(page.locator("#progressBody")).toContainText("Nothing recorded yet");
 });
 

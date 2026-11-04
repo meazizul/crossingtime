@@ -31,8 +31,8 @@ let gsCurrentScreen = "home";
  * and CACHE_VERSION (sw.js). In the native app the real bundle values are
  * read from the App plugin and override these. */
 const GS_APP_VERSION = "1.0";
-const GS_APP_BUILD = "20";
-const GS_APP_DATE = "3 November 2026";
+const GS_APP_BUILD = "21";
+const GS_APP_DATE = "4 November 2026";
 
 async function gsRenderAbout() {
   const el = document.getElementById("aboutVersion");
@@ -140,6 +140,14 @@ function gsShowScreen(name) {
     name = "home";
     wantedLocked = true;
   }
+  // The same setup check as Home's buttons, for every route: a shortcut,
+  // Siri or a link used to open an activity Home would refuse (tracker
+  // 20.16). Home then shows "Start here" and the way to Instructor setup.
+  let wantedSetup = "";
+  if (GS_STEP_ORDER.includes(name) && typeof gsHasTimes === "function" && !gsHasTimes()) {
+    wantedSetup = (typeof gsSetupProblem === "function" && gsSetupProblem()) || "The crossing times are not set yet.";
+    name = "home";
+  }
   const leaving = gsCurrentScreen;
   gsCancelActivities();
   if (leaving === "instructor" && name !== "instructor" && typeof gsInstructorLeave === "function") gsInstructorLeave();
@@ -186,6 +194,10 @@ function gsShowScreen(name) {
     if (layout) setTimeout(() => { if (gsCurrentScreen === name) announceScreenReader(layout, { speak: false }); }, 1500);
   }
   if (wantedLocked) gsSessionCodeAsk();
+  else if (wantedSetup) {
+    const message = `${wantedSetup} Set them in Instructor setup first.`;
+    setTimeout(() => announceScreenReader(message), 400);
+  }
 }
 
 /* ============================================================
@@ -224,11 +236,11 @@ const GS_SESSION_LOCK_ENABLED = true;
 const GS_UNLOCK_KEY = "om-session-unlock";
 const GS_SESSION_CODES = [
   { id: "tester",
-    sha256: "f8b4b02c09cf57b204db3b18aa763786d15574ec0824e3639e10afc54990d52d", djb2: "7c5403cd" },
+    sha256: "f8b4b02c09cf57b204db3b18aa763786d15574ec0824e3639e10afc54990d52d" },
   { id: "session1", from: [2026, 12, 5, 12, 30], to: [2026, 12, 5, 15, 30],
-    sha256: "24a63ec7c93bdbb5b5dea931017f958545ef99af8d6f09a8260115a2a1c976cf", djb2: "7c526605" },
+    sha256: "24a63ec7c93bdbb5b5dea931017f958545ef99af8d6f09a8260115a2a1c976cf" },
   { id: "session2", from: [2026, 12, 5, 15, 0], to: [2026, 12, 5, 18, 30],
-    sha256: "4b3d0e48caf0f1eef87000c663d60d0a880d65475b9440a1b7c2a8bc0ae15c2f", djb2: "7c57d16b" }
+    sha256: "4b3d0e48caf0f1eef87000c663d60d0a880d65475b9440a1b7c2a8bc0ae15c2f" }
 ];
 
 function gsIsUnlocked() {
@@ -245,12 +257,6 @@ function gsSetUnlocked(codeId = "tester") {
     localStorage.removeItem("om-lock-seen");
     sessionStorage.removeItem("gs-session-unlocked");
   } catch (error) { /* ignore */ }
-}
-
-function gsDjb2(text) {
-  let h = 5381;
-  for (const c of text) h = ((h * 33) ^ c.charCodeAt(0)) >>> 0;
-  return h.toString(16);
 }
 
 function gsLocalTime(parts) {
@@ -273,8 +279,11 @@ async function gsCodeCheck(raw, now = Date.now()) {
   } catch (error) {
     hex = null;
   }
-  const small = hex ? null : gsDjb2(code);
-  const hit = GS_SESSION_CODES.find((c) => (hex ? c.sha256 === hex : c.djb2 === small));
+  // No 32-bit fallback any more (tracker 20.7): it also accepted other
+  // inputs that shared its short hash. Every place the app runs (the iPhone
+  // and Android apps, https://crossingtime.app) is a secure context.
+  if (!hex) return null;
+  const hit = GS_SESSION_CODES.find((c) => c.sha256 === hex);
   if (!hit) return null;
   if (hit.from && now < gsLocalTime(hit.from)) return { id: hit.id, ok: false, reason: "early" };
   if (hit.to && now > gsLocalTime(hit.to)) return { id: hit.id, ok: false, reason: "late" };
@@ -877,8 +886,8 @@ async function gsEmailReport() {
 async function gsExportCsv() {
   const code = typeof getClientCode === "function" ? getClientCode() : "";
   const csv = gsBuildCsv({ clientCode: code });
-  const stamp = new Date().toISOString().slice(0, 10);
-  const name = `gap-sense-report${code ? `-${code}` : ""}-${stamp}.csv`;
+  const stamp = typeof gsCsvDate === "function" ? gsCsvDate(new Date()) : new Date().toISOString().slice(0, 10);
+  const name = `crossingtime-report${code ? `-${code}` : ""}-${stamp}.csv`;
   const outcome = await gsShareFile({ name, text: csv, mime: "text/csv", title: `${gsReportSubject()} (CSV)` });
   const messages = {
     shared: "The CSV file was handed to the app you chose. It opens in Excel, Numbers or Google Sheets, one try per row.",
@@ -887,7 +896,9 @@ async function gsExportCsv() {
     cancelled: "Not exported.",
     failed: "Could not export. Use Copy report instead."
   };
-  gsReportNote(messages[outcome] || messages.failed);
+  const message = messages[outcome] || messages.failed;
+  gsReportNote(message);
+  return { outcome, message };
 }
 
 /*
@@ -908,6 +919,21 @@ function gsRenderDataPlace() {
   if (note) note.textContent = phone ? "Kept on this phone, and in your phone's own backup if it is on." : "Kept only in this browser.";
   const where = document.getElementById("deleteHistoryWhere");
   if (where) where.textContent = phone ? "It is deleted from this phone now, and from your phone's backup at its next backup." : "It is deleted from this browser.";
+  // Several students on one phone: say whose history goes (tracker 20.3).
+  const student = gsHistoryStudentName();
+  const title = document.getElementById("deleteHistoryTitle");
+  if (title) title.textContent = student ? `Delete all practice history for student ${student}?` : "Delete all your practice history?";
+  const what = document.getElementById("deleteHistoryWhat");
+  if (what) what.textContent = student
+    ? `This deletes every try recorded for student ${student}. The other students' practice stays. It cannot be undone.`
+    : "This deletes every try you have recorded. It cannot be undone.";
+}
+
+/* The active student's code when the phone has several students, else "". */
+function gsHistoryStudentName() {
+  if (typeof gsActiveStudent !== "function") return "";
+  const active = gsActiveStudent();
+  return active ? (typeof gsStudentLabel === "function" ? gsStudentLabel(active) : active.code || "") : "";
 }
 
 function gsClearData() {
@@ -929,6 +955,9 @@ function gsCloseDeleteHistory() {
 
 async function gsConfirmDeleteHistory() {
   gsClearHistory();
+  // Instructor setup's checkbox always shows the real state (tracker 20.8).
+  const adaptiveToggle = document.getElementById("adaptiveMarginToggle");
+  if (adaptiveToggle) adaptiveToggle.checked = gsAdaptiveEnabled();
   // A preview made before the delete still held the deleted practice, and
   // Send it would send it (bug 35, Oct 2026 review).
   const preview = document.getElementById("reportPreview");
@@ -936,9 +965,11 @@ async function gsConfirmDeleteHistory() {
   gsCloseReport();
   gsRenderProgress();
   gsRenderHome();
+  const student = gsHistoryStudentName();
+  const whose = student ? `Practice history for student ${student}` : "All practice history";
   const message = gsDataOnPhone()
-    ? "All practice history deleted from this phone. Your phone's backup will no longer have it after its next backup."
-    : "All practice history deleted from this browser.";
+    ? `${whose} deleted from this phone. Your phone's backup will no longer have it after its next backup.`
+    : `${whose} deleted from this browser.`;
   const note = document.getElementById("reportNote");
   if (note) note.textContent = message;
   gsCloseDeleteHistory();

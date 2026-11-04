@@ -193,8 +193,11 @@ Under it, the ways to send:
   points to the other ways.
 - **Send with another app** opens the phone's share menu (WhatsApp, AirDrop,
   Mail, anything).
-- **Export for Excel (CSV file)** shares or downloads a spreadsheet file, one
-  try per row, with every time in seconds.
+- **Export for Excel (CSV file)** shares or downloads a spreadsheet file
+  (`crossingtime-report-<code>-<date>.csv`), one try per row, with every time
+  in seconds. Its date is written as year-month-day and its time of day on a
+  24-hour clock, the same on every phone whatever its language, so Excel reads
+  them as dates and times (build 21).
 - **Copy report** copies the text; **Hide report** closes it.
 
 The report shows the actual times of every try (the sample or warning time,
@@ -274,10 +277,22 @@ November 2026). It is the first section of Instructor setup.
   with that student's crossing times, margin, activities, sounds and practice
   history. Home then says "Student: AB12". The report gives the code and the
   date started.
-- **Remove student** opens a warning that offers **Export the report first
-  (CSV file)**, then Cancel or Remove student. Removing deletes only that
-  student; the next one in the list takes over, and with none left the app is
-  back to one empty student.
+- **Remove student** opens a warning that says where the student's data is
+  deleted from (this phone and, at its next backup, the phone's backup) and
+  offers **Export the report first (CSV file)**, then Cancel or Remove student.
+  The export says what really happened; if it was cancelled or failed, the
+  warning says the history has not been saved anywhere else (build 21).
+  Removing deletes only that student; the next one in the list takes over, and
+  with none left the app is back to one empty student.
+- With several students, **Delete all my practice history** names the student
+  ("Delete all practice history for student AB12?") and deletes only theirs.
+- Two students cannot have the same code: the Student code field refuses a
+  code another student on the phone already has. A **setup link** goes to the
+  student it was made for: if another student on the phone has its code, the
+  app switches to that student first; if no one has it, that student is added
+  (build 21).
+- Adding, switching and removing are all or nothing: if the phone's storage
+  for the app is full, nothing changes and the app says so (build 21).
 - Accessibility settings stay with the phone, not the student. The instructor
   code and the instructor's number and email are the instructor's, so they
   stay too.

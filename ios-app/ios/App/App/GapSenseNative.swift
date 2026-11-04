@@ -80,6 +80,7 @@ public class GSNativePlugin: CAPPlugin, CAPBridgedPlugin {
 
     private var volumeObservation: NSKeyValueObservation?
     private var routeObserver: NSObjectProtocol?
+    private var interruptionObserver: NSObjectProtocol?
 
     override public func load() {
         // Tell the page when the phone's volume changes, so the "volume is
@@ -93,8 +94,24 @@ public class GSNativePlugin: CAPPlugin, CAPBridgedPlugin {
         // event, so Comparison preparation uses the delay of the route in use.
         routeObserver = NotificationCenter.default.addObserver(
             forName: AVAudioSession.routeChangeNotification, object: nil, queue: .main
-        ) { [weak self] _ in
+        ) { [weak self] note in
             self?.notifyListeners("volume", data: ["value": AVAudioSession.sharedInstance().outputVolume])
+            // A new output (AirPods, hearing aids) or the old one gone: the
+            // audio engine stops and restarts, so a sample playing now is cut
+            // (tracker 20.11). The page cancels the try.
+            if let raw = note.userInfo?[AVAudioSessionRouteChangeReasonKey] as? UInt,
+               let reason = AVAudioSession.RouteChangeReason(rawValue: raw),
+               reason == .newDeviceAvailable || reason == .oldDeviceUnavailable {
+                self?.notifyListeners("audioInterrupted", data: ["reason": "route"])
+            }
+        }
+        // A call, Siri or an alarm takes the sound: the engine's clock stops.
+        interruptionObserver = NotificationCenter.default.addObserver(
+            forName: AVAudioSession.interruptionNotification, object: nil, queue: .main
+        ) { [weak self] note in
+            guard let raw = note.userInfo?[AVAudioSessionInterruptionTypeKey] as? UInt,
+                  AVAudioSession.InterruptionType(rawValue: raw) == .began else { return }
+            self?.notifyListeners("audioInterrupted", data: ["reason": "interruption"])
         }
         shortcutObserver = NotificationCenter.default.addObserver(
             forName: GSShortcutRouter.didRequest, object: nil, queue: .main
@@ -112,6 +129,9 @@ public class GSNativePlugin: CAPPlugin, CAPBridgedPlugin {
             NotificationCenter.default.removeObserver(observer)
         }
         if let observer = routeObserver {
+            NotificationCenter.default.removeObserver(observer)
+        }
+        if let observer = interruptionObserver {
             NotificationCenter.default.removeObserver(observer)
         }
     }

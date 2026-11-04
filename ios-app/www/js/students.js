@@ -53,6 +53,44 @@ function gsStudentsSave(registry) {
   else localStorage.setItem(GS_STUDENTS_KEY, JSON.stringify(registry));
 }
 
+const GS_STUDENTS_FULL = "The phone's storage for this app is full, so nothing was changed. Export and remove a student you no longer need, or delete old practice history, then try again.";
+
+/*
+ * Every change to the students is one step that either happens completely or
+ * not at all (tracker 20.1). The registry is saved first, with the student
+ * who is leaving already inside it; only then is the live data swapped. If
+ * either write fails (the storage is full), the registry and the live data
+ * are put back exactly as they were and the instructor is told.
+ */
+function gsStudentsTransaction(registry, nextSnap) {
+  const oldRaw = localStorage.getItem(GS_STUDENTS_KEY);
+  const before = gsCaptureStudent();
+  try {
+    gsStudentsSave(registry);
+  } catch (error) {
+    try { if (oldRaw === null) localStorage.removeItem(GS_STUDENTS_KEY); else localStorage.setItem(GS_STUDENTS_KEY, oldRaw); } catch (e) { /* unchanged */ }
+    return { ok: false, message: GS_STUDENTS_FULL };
+  }
+  try {
+    gsApplyStudent(nextSnap);
+  } catch (error) {
+    // Put everything back: first free the half-written student, then the
+    // old registry, then the student who was in use. All of it fitted before.
+    try { gsApplyStudent({}); } catch (e) { /* keep going */ }
+    try { if (oldRaw === null) localStorage.removeItem(GS_STUDENTS_KEY); else localStorage.setItem(GS_STUDENTS_KEY, oldRaw); } catch (e) { /* keep going */ }
+    try { gsApplyStudent(before); } catch (e) { /* keep going */ }
+    return { ok: false, message: GS_STUDENTS_FULL };
+  }
+  return { ok: true };
+}
+
+/* The other student on this phone who has this code, if any. */
+function gsStudentsOwnerOf(rawCode, registry = gsStudentsLoad()) {
+  const code = gsStudentCodeClean(rawCode);
+  if (!registry || !code) return null;
+  return registry.list.find((s) => s.code === code && s.id !== registry.active) || null;
+}
+
 /* The date on the phone's own clock, as YYYY-MM-DD (not UTC). */
 function gsTodayLocal(now = new Date()) {
   const pad = (n) => String(n).padStart(2, "0");
@@ -114,15 +152,25 @@ async function gsStudentsCommitAndReload(message) {
 }
 
 /* The registry with the active student's code kept in step with the
- * Student code field (Instructor setup, or a setup link, may change it). */
+ * Student code field (Instructor setup, or a setup link, may change it).
+ * A code that another student on this phone already has is refused, and the
+ * field goes back to the active student's own code (tracker 20.4). */
+let gsStudentsRefusedCode = "";
 function gsStudentsSynced() {
   const registry = gsStudentsLoad();
   if (!registry) return null;
   const active = registry.list.find((s) => s.id === registry.active);
   const code = gsStudentCodeClean(localStorage.getItem("om-client-code") || "");
   if (active && active.code !== code) {
+    if (gsStudentsOwnerOf(code, registry)) {
+      gsStudentsRefusedCode = code;
+      try { localStorage.setItem("om-client-code", active.code || ""); } catch (error) { /* unchanged */ }
+      const field = document.getElementById("clientCode");
+      if (field) field.value = active.code || "";
+      return registry;
+    }
     active.code = code;
-    gsStudentsSave(registry);
+    try { gsStudentsSave(registry); } catch (error) { /* the code is saved with the next change */ }
   }
   return registry;
 }
@@ -152,24 +200,23 @@ function gsStudentsAdd(rawCode, started) {
   const id = gsNewStudentId();
   registry.list.push({ id, code, started: day });
   registry.data[registry.active] = gsCaptureStudent();
-  gsApplyStudent({ "om-client-code": code });
   registry.active = id;
   delete registry.data[id];
-  gsStudentsSave(registry);
-  return { ok: true, code };
+  const done = gsStudentsTransaction(registry, { "om-client-code": code });
+  return done.ok ? { ok: true, code } : done;
 }
 
+/* Returns { ok: true } or { ok: false, message }. */
 function gsStudentsSwitch(id) {
   const registry = gsStudentsSynced();
-  if (!registry || id === registry.active) return false;
+  if (!registry || id === registry.active) return { ok: false, message: "" };
   const target = registry.list.find((s) => s.id === id);
-  if (!target) return false;
+  if (!target) return { ok: false, message: "" };
+  const nextSnap = registry.data[id] || { "om-client-code": target.code };
   registry.data[registry.active] = gsCaptureStudent();
-  gsApplyStudent(registry.data[id] || { "om-client-code": target.code });
   delete registry.data[id];
   registry.active = id;
-  gsStudentsSave(registry);
-  return true;
+  return gsStudentsTransaction(registry, nextSnap);
 }
 
 /* Removes the active student and everything of theirs. Another student
@@ -181,13 +228,14 @@ function gsStudentsRemoveActive() {
   registry.list = registry.list.filter((s) => s.id !== registry.active);
   delete registry.data[registry.active];
   const next = registry.list[0] || null;
-  gsApplyStudent(next ? (registry.data[next.id] || { "om-client-code": next.code }) : {});
+  const nextSnap = next ? (registry.data[next.id] || { "om-client-code": next.code }) : {};
   if (next) {
     delete registry.data[next.id];
     registry.active = next.id;
   }
-  gsStudentsSave(next ? registry : null);
-  return { removed: leaving, next };
+  // Removing frees space, so it fits; still all or nothing.
+  const done = gsStudentsTransaction(next ? registry : null, nextSnap);
+  return done.ok ? { removed: leaving, next } : { removed: null, next: null, message: done.message };
 }
 
 function gsStudentsSetStarted(day) {
@@ -196,7 +244,44 @@ function gsStudentsSetStarted(day) {
   const active = registry.list.find((s) => s.id === registry.active);
   if (!active || !/^\d{4}-\d{2}-\d{2}$/.test(day)) return;
   active.started = day;
-  gsStudentsSave(registry);
+  try { gsStudentsSave(registry); } catch (error) { gsStudentsNote(GS_STUDENTS_FULL); }
+}
+
+/*
+ * A setup link on a phone with several students (tracker 20.4). The link is
+ * made for one student, by code:
+ *   - another student on this phone has that code: switch to that student
+ *     first, then the link is applied to them (after the restart);
+ *   - no student has it and the student in use already has a different code:
+ *     the link is for a new student, who is added and then set up;
+ *   - otherwise (the student in use has that code, or no code yet, or the
+ *     phone has one student): the link is applied as before.
+ * Returns true when the app is restarting to do it; the link stays in the
+ * address so it is applied after the restart.
+ */
+function gsStudentsRouteSetupLink(code) {
+  const registry = gsStudentsSynced();
+  const clean = gsStudentCodeClean(code);
+  if (!registry || !clean) return false;
+  const active = registry.list.find((s) => s.id === registry.active);
+  const owner = gsStudentsOwnerOf(clean, registry);
+  let result = null;
+  let message = "";
+  if (owner) {
+    result = gsStudentsSwitch(owner.id);
+    message = `This setup link is for student ${clean}. The app now shows ${clean}'s practice, with the instructor's setup.`;
+  } else if (active && active.code && active.code !== clean) {
+    result = gsStudentsAdd(clean, gsTodayLocal());
+    message = `This setup link is for student ${clean}, who was not on this phone. Student ${clean} was added, with the instructor's setup.`;
+  } else {
+    return false;
+  }
+  if (!result.ok) {
+    try { sessionStorage.setItem("gs-students-note", result.message || GS_STUDENTS_FULL); } catch (error) { /* ignore */ }
+    return false;
+  }
+  gsStudentsCommitAndReload(message);
+  return true;
 }
 
 /* ---------------- screen ---------------- */
@@ -282,7 +367,10 @@ function gsOpenRemoveStudent() {
   const title = document.getElementById("removeStudentTitle");
   if (title) title.textContent = `Remove student ${name}?`;
   const what = document.getElementById("removeStudentWhat");
-  if (what) what.textContent = `This deletes ${name}'s crossing times, settings and practice history from this phone. It cannot be undone.`;
+  // Where it goes, as Delete history says it (tracker 20.3).
+  const phone = Boolean(window.Capacitor?.isNativePlatform?.());
+  const where = phone ? "from this phone now, and from your phone's backup at its next backup" : "from this browser";
+  if (what) what.textContent = `This deletes ${name}'s crossing times, settings and practice history ${where}. It cannot be undone.`;
   if (!dialog.open) {
     if (typeof lockPageScroll === "function") lockPageScroll();
     if (typeof setMainContentInert === "function") setMainContentInert(true);
@@ -298,6 +386,11 @@ function gsCloseRemoveStudent() {
 
 function gsConfirmRemoveStudent() {
   const result = gsStudentsRemoveActive();
+  if (result && !result.removed) {
+    const note = document.getElementById("removeStudentNote");
+    if (note) note.textContent = result.message;
+    return;
+  }
   gsCloseRemoveStudent();
   if (!result) return;
   const gone = gsStudentLabel(result.removed);
@@ -317,7 +410,13 @@ function gsBindStudents() {
   document.getElementById("studentSelect")?.addEventListener("change", (event) => {
     const registry = gsStudentsLoad();
     const target = registry?.list.find((s) => s.id === event.target.value);
-    if (!target || !gsStudentsSwitch(target.id)) return;
+    if (!target) return;
+    const result = gsStudentsSwitch(target.id);
+    if (!result.ok) {
+      if (result.message) gsStudentsNote(result.message);
+      gsRenderStudents();
+      return;
+    }
     gsStudentsCommitAndReload(`Now showing student ${gsStudentLabel(target)}.`);
   });
   document.getElementById("studentStarted")?.addEventListener("change", (event) => {
@@ -327,10 +426,23 @@ function gsBindStudents() {
   document.getElementById("removeStudentBtn")?.addEventListener("click", gsOpenRemoveStudent);
   document.getElementById("cancelRemoveStudentBtn")?.addEventListener("click", gsCloseRemoveStudent);
   document.getElementById("confirmRemoveStudentBtn")?.addEventListener("click", gsConfirmRemoveStudent);
-  document.getElementById("exportRemoveStudentBtn")?.addEventListener("click", () => {
-    if (typeof gsExportCsv === "function") gsExportCsv();
+  // Waits for the export and says what really happened (tracker 20.15).
+  document.getElementById("exportRemoveStudentBtn")?.addEventListener("click", async () => {
     const note = document.getElementById("removeStudentNote");
-    if (note) note.textContent = "The report file was handed to your phone. When it is saved or sent, you can remove the student.";
+    const button = document.getElementById("exportRemoveStudentBtn");
+    if (typeof gsExportCsv !== "function") return;
+    if (note) note.textContent = "Exporting…";
+    if (button) button.disabled = true;
+    let result = null;
+    try { result = await gsExportCsv(); } catch (error) { result = null; }
+    if (button) button.disabled = false;
+    const outcome = result?.outcome || "failed";
+    const said = result?.message || "Could not export.";
+    const text = outcome === "cancelled" || outcome === "failed"
+      ? `${said} The practice history has not been saved anywhere else.`
+      : `${said} When it is saved or sent, you can remove the student.`;
+    if (note) note.textContent = text;
+    if (typeof announceScreenReader === "function") announceScreenReader(text);
   });
   document.getElementById("removeStudentModal")?.addEventListener("close", () => {
     const note = document.getElementById("removeStudentNote");
@@ -341,7 +453,15 @@ function gsBindStudents() {
     }
     document.getElementById("removeStudentBtn")?.focus({ preventScroll: true });
   });
-  document.getElementById("clientCode")?.addEventListener("change", () => gsRenderStudents());
+  document.getElementById("clientCode")?.addEventListener("change", () => {
+    gsStudentsRefusedCode = "";
+    gsRenderStudents();
+    if (gsStudentsRefusedCode) {
+      const code = gsStudentsRefusedCode;
+      gsStudentsRefusedCode = "";
+      gsStudentsNote(`There is already a student ${code} on this phone. To work with ${code}, choose them under Students on this phone.`);
+    }
+  });
 
   gsRenderStudents();
   // Said once after the switch that reloaded the app.

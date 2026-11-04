@@ -8,6 +8,51 @@ than commit history. They are accurate to the day.
 
 ---
 
+## 2026-11-04 (build 21) — the build 20 review in Cindi's bug tracker
+
+From the review of build 20 that Cindi Lashinsky shared on 4 November 2026
+(tracker items 20.1 to 20.17).
+
+- **Several students (20.1, 20.3, 20.4, 20.15).** Adding, switching and
+  removing a student either happens completely or not at all: if the phone's
+  storage for the app is full, nothing changes and the instructor is told.
+  Delete history and Remove student name the student and say where the data
+  goes, the phone's backup included. The Student code field refuses another
+  student's code, and a setup link goes to the student it was made for
+  (switching to them, or adding them). Remove student's "Export the report
+  first" waits for the export and says what really happened.
+- **Low verbosity (20.2).** With "Announce results and describe the sounds"
+  off, the result is still shown and read in its short form ("Correct.", "Not
+  correct.", "Within the margin."), as Settings and this guide said; only the
+  description of the sounds is left out.
+- **The touch counts, not the lift (20.9).** The Begin and Mark button, the
+  Comparison preparation stop, How much and the street buttons are timed from
+  the moment the finger comes down, as the swipe areas already were. A
+  screen reader's double-tap and the keyboard are timed when they act.
+- **Practice replay timing (20.10).** The try is saved after the whole replay
+  is scheduled, so a long history no longer makes the crossing-time sound late.
+- **Interruptions (20.11).** Siri, a call banner, an alarm, or headphones or
+  hearing aids connecting during a sample or Comparison preparation's timing
+  cancel the try, unrecorded, with a message, as hiding the app does.
+- **Screen awake (20.12).** The screen stays on from the start of a try until
+  its replay ends, in all four activities, so a long crossing time no longer
+  runs into the auto-lock.
+- **CSV (20.14, 20.6).** Dates as 2026-11-04 and times on a 24-hour clock on
+  every phone. The file is named `crossingtime-report-…csv`.
+- **Delete history (20.8)** resets the adaptive margins but leaves the
+  instructor's adaptive switch on, and the checkbox shows it.
+- **Shortcuts and links (20.16)** to an activity get the same setup check as
+  Home's buttons; with no usable crossing times they go to Home.
+- **Web version offline copy (20.17).** A new version is installed only when
+  every file downloaded; otherwise the previous copy stays. Only pages fall
+  back to the home page. On a weak signal the saved copy is used after 3
+  seconds.
+- **Session code (20.7).** The short 32-bit fallback check is gone; the code is
+  checked with SHA-256 only.
+- **README (20.6).** The origin sentence says the app was called Gap Sense
+  from August to October 2026; the install section no longer names a build.
+  The unused QR code package is removed.
+
 ## 2026-11-03 — the web address is crossingtime.app
 
 - The landing page and the web app moved to https://crossingtime.app (the

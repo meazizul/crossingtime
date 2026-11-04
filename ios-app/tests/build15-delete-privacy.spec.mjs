@@ -65,7 +65,8 @@ test("14.2: Delete history deletes the history only, says where from, and leaves
   await page.click("#confirmDeleteHistoryBtn");
   await expect(page.locator("#deleteHistoryModal")).toBeHidden();
   expect(await history(page)).toEqual([]);
-  expect(await page.evaluate(() => localStorage.getItem("om-adaptive-margin"))).toBeNull();
+  // Tracker 20.8: the lanes go back to the instructor's margin, the switch stays on.
+  expect(await page.evaluate(() => JSON.parse(localStorage.getItem("om-adaptive-margin")))).toEqual({ enabled: true, lanes: {} });
   await expect(page.locator("#reportNote")).toHaveText("All practice history deleted from this browser.");
   expect(await announcer(page)).toContain("deleted from this browser");
   await expect(page.locator("#progressBody")).toContainText("Nothing recorded yet");

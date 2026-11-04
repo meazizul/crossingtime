@@ -90,7 +90,8 @@ test("practice: with the options off nothing is spoken and the lead-in is the ol
   await tick(page, 9000);
   expect(await spoken(page)).toEqual([]);
   expect(await history(page)).toHaveLength(1);
-  expect(await announcer(page)).toBe("Ready for another try.");
+  // Tracker 20.2: with the descriptions off the verdict is still read, in short.
+  expect(await announcer(page)).toBe("Within the margin. Ready for another try.");
 });
 
 test("practice: with a screen reader running the words go to the live region, not the app's own voice", async ({ page }) => {

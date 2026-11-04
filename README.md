@@ -10,13 +10,13 @@ learns the *feel* of the duration, not a stopwatch reading.
 
 ## Origins
 
-CrossingTime, which was called CrossingTime from August to October 2026, began as a copy of **Cindi Lashinsky's CrossingTime (Streets)
+CrossingTime, which was called Gap Sense from August to October 2026, began as a copy of **Cindi Lashinsky's CrossingTime (Streets)
 repository**, her original proof of concept, and has been refined and expanded
 through ongoing collaboration with her. See [`NOTICE.md`](NOTICE.md).
 
 ---
 
-## Install the app (build 18)
+## Install the app
 
 **One link, for everyone:** <https://crossingtime.app/>. It has a
 button for iPhone, a button for Android and a button for the browser version,
@@ -38,8 +38,8 @@ code; the four practice activities open after it is typed, and the phone stays
 unlocked from then on. Everything else in the app works without it. Instructors running their own sessions: ask
 the team for the code.
 
-To check which build you have: open the app, **Help**, **About**. It should say
-build 19. Step-by-step help for each phone, written to be read aloud:
+To check which build you have: open the app, **Help**, **About**. The newest
+build is listed in [`CHANGELOG.md`](CHANGELOG.md). Step-by-step help for each phone, written to be read aloud:
 [`docs/INSTALL_GUIDE.md`](docs/INSTALL_GUIDE.md).
 
 ## Test it and tell us what you find
