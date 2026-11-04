@@ -31,7 +31,7 @@ let gsCurrentScreen = "home";
  * and CACHE_VERSION (sw.js). In the native app the real bundle values are
  * read from the App plugin and override these. */
 const GS_APP_VERSION = "1.0";
-const GS_APP_BUILD = "21";
+const GS_APP_BUILD = "22";
 const GS_APP_DATE = "4 November 2026";
 
 async function gsRenderAbout() {

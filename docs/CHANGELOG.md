@@ -8,6 +8,29 @@ than commit history. They are accurate to the day.
 
 ---
 
+## 2026-11-04 (build 22) — Cindi's decisions on tracker items 20.5 and 20.13
+
+From Cindi Lashinsky's email of 4 November 2026, 7:57 AM.
+
+- **Accessibility settings follow the student (20.5).** With several students
+  on one phone, choosing a student brings back that student's accessibility
+  settings (feedback mode, vibration, voice, verbosity, text size and the
+  rest), as Cindi asked: some students want help setting them, others not. A
+  new student starts with the settings in use when they are added, so the
+  screen does not change under the instructor. Students saved by builds 20
+  and 21 are given the phone's current settings once, so nobody loses theirs.
+  The instructor code, number and email stay with the phone.
+- **Traffic that drives on the left (20.13).** A new Instructor setup option,
+  "Vehicles drive on the": right side of the road (the default, as before) or
+  left side. On the left, a vehicle from the right is compared with the first
+  half of the street and one from the left with the full street, in At the
+  street; the labels in Instructor setup, both comparison activities and Help
+  say the right side. It travels in the setup link (added at the end of the
+  link's option code, so older links still read the same). No setting for
+  one-way streets (Cindi).
+
+---
+
 ## 2026-11-04 (build 21) — the build 20 review in Cindi's bug tracker
 
 From the review of build 20 that Cindi Lashinsky shared on 4 November 2026

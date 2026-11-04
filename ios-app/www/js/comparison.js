@@ -1291,7 +1291,8 @@ function gsCompareSetStreet(street) {
  *     was held, and judging the conditions is taught by the instructor;
  *   - the student marks hearing or vision, saved with each vehicle;
  *   - detection is a swipe toward the side the vehicle comes from (left: the
- *     first half of the street; right: the full street), arrival is a tap,
+ *     first half of the street; right: the full street; the other way round
+ *     where traffic drives on the left, build 22), arrival is a tap,
  *     "it never came" is a swipe down. Buttons do the same for screen
  *     readers;
  *   - after arrival the STUDENT judges longer / shorter / about the same,
@@ -1312,6 +1313,8 @@ const gsLiveState = {
 };
 
 function gsLiveStreetFor(direction) {
+  // Left-hand traffic swaps the sides (tracker 20.13).
+  if (typeof gsStreetForDirection === "function") return gsStreetForDirection(direction);
   return direction === "left" ? "half" : "full";
 }
 

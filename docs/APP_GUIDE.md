@@ -33,7 +33,8 @@ the same line, and Help can show it again.
 
 Every activity compares against two reference times: the **first half of the
 street** (traffic from the left) and the **full street** (traffic from the
-right). These are measured and set by the O&M Specialist: time at least three
+right; the other way round where vehicles drive on the left, see **Vehicles
+drive on the** below). These are measured and set by the O&M Specialist: time at least three
 crossings and use the longest, because if it took that long once it may take
 that long again. The instructor enters them in **Instructor setup**, or sends
 the student a link that sets them (see section 2). The app does not measure
@@ -237,6 +238,7 @@ Open **Instructor setup** from Home, or from **Settings** (gear icon). Under
 
 | Field | Meaning | How to get it |
 |---|---|---|
+| **Vehicles drive on the** | Right side of the road (default) or left side (United Kingdom, Ireland, Australia, Japan, India…). It decides which side is the first half: driving on the right, traffic from the left; driving on the left, traffic from the right. At the street and both comparison activities follow it, and it travels in the setup link (build 22) | The country where the student practises. One-way streets have no setting |
 | **First half of the street, traffic from the left (seconds)** | How long this student takes to clear the first half | Instructor times at least three crossings, uses the longest |
 | **Full street, traffic from the right (seconds)** | How long to cross the whole street | Same |
 | **Margin of error (seconds)** | How close counts as "on time" | Chosen by the instructor. The app starts at 0.4 s; 0.5 s has historically been taught; there is no research yet on the right value. It must be more than 0 and at most 60 s |
@@ -293,9 +295,12 @@ November 2026). It is the first section of Instructor setup.
   (build 21).
 - Adding, switching and removing are all or nothing: if the phone's storage
   for the app is full, nothing changes and the app says so (build 21).
-- Accessibility settings stay with the phone, not the student. The instructor
-  code and the instructor's number and email are the instructor's, so they
-  stay too.
+- Accessibility settings (sound, visual or vibration feedback, voice,
+  verbosity, text size and the rest) belong to each student: choosing a
+  student brings back that student's settings. A new student starts with the
+  settings in use when they are added (build 22; until build 21 they stayed
+  with the phone). The instructor code and the instructor's number and email
+  are the instructor's, so they stay with the phone.
 - Every student is kept in the durable copy and the phone's own backup, like
   the rest (`om-students`, `students.js`).
 
