@@ -609,7 +609,7 @@ function gsShowPad(el, { opener = document.activeElement } = {}) {
   el.hidden = false;
   gsOpenPads += 1;
   gsPadStackSync();
-  if (gsOpenPads === 1 && typeof gsKeepAwake === "function") gsKeepAwake(true);
+  if (gsOpenPads === 1 && typeof gsKeepAwakeFor === "function") gsKeepAwakeFor("pad", true);
   gsDirectTouchSync({ focus: true });
   if (typeof setMainContentInert === "function") setMainContentInert(true);
   document.body.classList.add("pad-open");
@@ -628,7 +628,7 @@ function gsHidePad(el, { focusTo = null } = {}) {
   const hadFocus = el.contains(document.activeElement) || document.activeElement === document.body;
   gsOpenPads = Math.max(0, gsOpenPads - 1);
   if (!gsOpenPads) {
-    if (typeof gsKeepAwake === "function") gsKeepAwake(false);
+    if (typeof gsKeepAwakeFor === "function") gsKeepAwakeFor("pad", false);
     document.body.classList.remove("pad-open");
     const dialogOpen = [...document.querySelectorAll("dialog")].some((d) => d.open);
     if (!dialogOpen && typeof setMainContentInert === "function") setMainContentInert(false);
@@ -821,11 +821,14 @@ function gsHowMuchPadBack() {
   if (typeof back === "function") back();
 }
 
-function gsHowMuchTap() {
+/* atMs: the touch-down time the swipe area or the button passes in (the
+ * moment that counts is the touch, tracker 20.9); now when there is none. */
+function gsHowMuchTap(atMs) {
   if (!gsHowMuchPad.onDone) return;
+  const at = Number.isFinite(atMs) && atMs <= performance.now() ? atMs : performance.now();
   const btn = document.getElementById("compareFollowUpBtn");
   if (!gsHowMuchPad.start) {
-    gsHowMuchPad.start = performance.now();
+    gsHowMuchPad.start = at;
     playStudentTone();
     hapticCue("start");
     if (btn) {
@@ -834,7 +837,7 @@ function gsHowMuchTap() {
     }
     return;
   }
-  const produced = (performance.now() - gsHowMuchPad.start) / 1000;
+  const produced = Math.max(0, at - gsHowMuchPad.start) / 1000;
   playStudentTone();
   const done = gsHowMuchPad.onDone;
   gsCloseHowMuchPad();
@@ -947,6 +950,8 @@ function gsCompareStatus(message, tone = "neutral", { announce = true } = {}) {
 }
 
 function gsCompareSetStartEnabled(enabled, label = "Play a sample warning time") {
+  // Awake from Play until the try is over (tracker 20.12).
+  if (typeof gsKeepAwakeFor === "function") gsKeepAwakeFor("compare", !enabled);
   const btn = document.getElementById("compareStartBtn");
   if (!btn) return;
   // Busy, not disabled: a disabled button drops VoiceOver's cursor to the
@@ -1091,7 +1096,7 @@ function gsCompareAnswer(answer) {
     if (gsCompareState.phase !== "judged") return;
     if (offerHowMuch) gsCompareStartHowMuch();
     else gsCompareReplay();
-  }, 1.2);
+  }, 1.2, (short) => gsCompareStatus(short, "neutral", { announce: false }));
 }
 
 function gsAnswerWords(answer) {
@@ -1127,7 +1132,9 @@ function gsCompareFinish(message, tone = "neutral", { focus = "play", describe =
   gsCompareSetStartEnabled(true);
   // The replay in words, then the prompt, as one utterance (build 15).
   const said = Boolean(describe) && a11ySettings.describeSounds && gsDescribe(`${describe} ${message}`);
-  gsCompareStatus(message, tone, { announce: !said });
+  // Off (Speech: Low): the verdict still shows and is read, in short (20.2).
+  const verdict = said ? "" : gsVerdictFromDescribe(describe);
+  gsCompareStatus(verdict ? `${verdict} ${message}` : message, tone, { announce: !said });
   gsPlayAgainShow("compare", focus !== "title");
   // After Back, focus goes to the screen's title (tracker 13.7); after Play it
   // again, the button itself; otherwise Play, where the student already is.
@@ -1463,6 +1470,19 @@ document.addEventListener("visibilitychange", () => {
   }
 });
 
+/* The sound was taken away during a sample (tracker 20.11): the sample the
+ * student heard is not the one that would be scored. */
+window.addEventListener("gs-audio-interrupted", () => {
+  const phase = gsCompareState.phase;
+  if (phase === "waiting" || phase === "playing") {
+    gsCompareCancel();
+    gsCompareFinish("The sound was interrupted, so that one was not recorded. Press Play for another.", "warn");
+  } else if (phase === "replaying") {
+    gsCompareCancel();
+    gsCompareFinish("The sound was interrupted during the replay. Your answer was saved. Press Play for another.");
+  }
+});
+
 /* Called by the shell when leaving the screen. */
 function gsLiveLeave() {
   gsPlayAgainClear("live");
@@ -1582,13 +1602,13 @@ function gsLiveAnswer(answer) {
       const title = `How much ${gsLiveState.category}?`;
       gsOpenHowMuchPad({ title, onDone: gsLiveHowMuchDone, onBack: gsLiveHowMuchBack });
       gsAnnouncePad(`${title} Tap to start, tap again to end.`, "Tap anywhere on the screen to start, and tap again to end.");
-    }, 1.2);
+    }, 1.2, (short) => gsLiveStatus(short, "neutral", { announce: false }));
     return;
   }
   gsDescribeThen(gsLiveTimers, verdict, () => {
     if (gsLiveState.phase !== "judging") return;
     gsLiveAfterVehicle({ judged: true, correct });
-  }, 0);
+  }, a11ySettings.describeSounds ? 0 : 1.0, (short) => gsLiveStatus(short, "neutral", { announce: false }));
 }
 
 /*
@@ -1751,7 +1771,9 @@ function gsLiveReady({ describe = "" } = {}) {
   const message = "Ready for the next vehicle.";
   // The replay in words, then the prompt, as one utterance (build 15).
   const said = Boolean(describe) && a11ySettings.describeSounds && gsDescribe(`${describe} ${message}`);
-  gsLiveStatus(message, "neutral", { announce: !said });
+  // Off (Speech: Low): the verdict still shows and is read, in short (20.2).
+  const verdict = said ? "" : gsVerdictFromDescribe(describe);
+  gsLiveStatus(verdict ? `${verdict} ${message}` : message, "neutral", { announce: !said });
   const playAgain = gsPlayAgainButton("live");
   const wasPlayingAgain = playAgain && !playAgain.hidden && gsIsBusy(playAgain);
   gsPlayAgainShow("live", true);
@@ -1890,7 +1912,8 @@ function gsComparisonInit() {
     });
   }
 
-  document.getElementById("compareFollowUpBtn")?.addEventListener("click", gsHowMuchTap);
+  const followUpBtn = document.getElementById("compareFollowUpBtn");
+  followUpBtn?.addEventListener("click", () => gsHowMuchTap(gsPressTime(followUpBtn)));
   const howMuchOverlay = document.getElementById("howMuchOverlay");
   if (howMuchOverlay) gsBindSwipeSurface(howMuchOverlay, () => ({ tap: gsHowMuchTap }));
 
@@ -1929,9 +1952,10 @@ function gsComparisonInit() {
   // At the street.
   document.getElementById("liveStartBtn")?.addEventListener("click", gsLiveOpen);
   document.querySelectorAll("[data-live-detect]").forEach((btn) => {
-    btn.addEventListener("click", () => gsLiveDetect(btn.dataset.liveDetect));
+    btn.addEventListener("click", () => gsLiveDetect(btn.dataset.liveDetect, gsPressTime(btn)));
   });
-  document.getElementById("liveArrivedBtn")?.addEventListener("click", gsLiveArrived);
+  const liveArrivedBtn = document.getElementById("liveArrivedBtn");
+  liveArrivedBtn?.addEventListener("click", () => gsLiveArrived(gsPressTime(liveArrivedBtn)));
   document.getElementById("liveNeverBtn")?.addEventListener("click", gsLiveNeverCame);
   const liveOverlay = document.getElementById("liveOverlay");
   if (liveOverlay) {

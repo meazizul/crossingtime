@@ -1075,7 +1075,7 @@
       </div>
       <div class="setup">
         <div class="setup-group" id="deleteHistoryText">
-          <p class="field-help">This deletes every try you have recorded. It cannot be undone.</p>
+          <p class="field-help" id="deleteHistoryWhat">This deletes every try you have recorded. It cannot be undone.</p>
           <p class="field-help" id="deleteHistoryWhere">It is deleted from this phone now, and from your phone's backup at its next backup.</p>
           <p class="field-help">Your settings, crossing times and instructor setup stay.</p>
           <p class="field-help">To keep a copy of your practice, send or export a report first.</p>
@@ -1128,10 +1128,10 @@
   <!-- Engine (practice/replay logic), then feature modules, then the shell. -->
   <!-- store.js first: it mirrors every localStorage write and restores lost data. -->
   <script src="js/store.js"></script>
+  <script src="js/students.js"></script>
   <script src="js/engine.js"></script>
   <script src="js/history.js"></script>
   <script src="js/features.js"></script>
-  <script src="js/students.js"></script>
   <script src="js/comparison.js"></script>
   <script src="js/signal.js"></script>
   <script src="js/app.js"></script>

@@ -709,6 +709,15 @@
         // scheduled on a stopped clock and the app went silent until it was
         // relaunched. Resume from any state that is not running or closed.
         audioContext.addEventListener?.("statechange", () => {
+          // The clock stopped while the app is on screen: a call, Siri, an
+          // alarm or another app took the sound. A timed sample or replay
+          // is cut (tracker 20.11).
+          // A blip the resume below recovers at once is not counted.
+          if (audioContext.state !== "running" && audioContext.state !== "closed" && !document.hidden) {
+            setTimeout(() => {
+              if (audioContext.state !== "running" && audioContext.state !== "closed" && !document.hidden) gsAudioInterrupted("web");
+            }, 250);
+          }
           if (audioContext.state === "interrupted") {
             audioContext.resume().catch(() => {});
           }
@@ -1539,6 +1548,11 @@
     function importSharedTimingSettings() {
       const hash = window.location.hash.replace(/^#/, "");
       if (!hash.startsWith("ts=")) return false;
+      // Several students on this phone: a link is applied to the student it
+      // was made for, never to whoever is selected (tracker 20.4). When that
+      // means a switch, the app restarts and the link is applied after it.
+      const parsedForStudent = parseShareToken(hash.slice(3));
+      if (parsedForStudent?.code && typeof gsStudentsRouteSetupLink === "function" && gsStudentsRouteSetupLink(parsedForStudent.code)) return true;
       applyShareToken(hash.slice(3));
       clearImportedHash();
       return true;
@@ -2388,13 +2402,65 @@
 
     /* The next step of an activity after a description: with nothing to say
      * it is an ordinary (cancellable) timer; after words, the words end it. */
-    function gsDescribeThen(timers, text, fn, minSec) {
+    function gsDescribeThen(timers, text, fn, minSec, show = null) {
       if (!a11ySettings.describeSounds || !text) {
+        // Off (Speech: Low): the result is still shown and read in its short
+        // form, "Correct." or "Not correct.", as Settings and the App Guide
+        // say; only the description of the sounds is left out (tracker 20.2).
+        if (text && typeof show === "function") gsShowShortResult(gsShortResult(text), show);
         const id = setTimeout(fn, Math.max(0, minSec) * 1000);
         if (Array.isArray(timers)) timers.push(id);
         return;
       }
       gsDescribe(text, { onDone: fn, minSec });
+    }
+
+    /*
+     * The moment that counts is the touch, not the lift (Cindi, Oct 16 2026;
+     * tracker 20.9). Buttons still act on click, so a screen reader's
+     * double-tap and the keyboard keep working, but a timed button asks for
+     * the moment the finger came down: the last pointerdown on that same
+     * button, if it was within a few seconds and was not cancelled. With no
+     * pointer sequence of its own (VoiceOver, TalkBack, a keyboard) the
+     * click's own time is used. Each touch counts once.
+     */
+    let gsLastPress = null;
+    document.addEventListener("pointerdown", (event) => {
+      if (event.isPrimary === false) return;
+      gsLastPress = { target: event.target, at: performance.now() };
+    }, { capture: true, passive: true });
+    document.addEventListener("pointercancel", () => { gsLastPress = null; }, { capture: true, passive: true });
+
+    function gsPressTime(el) {
+      const now = performance.now();
+      const press = gsLastPress;
+      gsLastPress = null;
+      if (press && el && (press.target === el || el.contains(press.target)) && now - press.at >= 0 && now - press.at < 5000) {
+        return press.at;
+      }
+      return now;
+    }
+
+    /* The first sentence of a result: "Not correct. It was longer." gives
+     * "Not correct." */
+    function gsShortResult(text) {
+      const match = String(text || "").match(/^[^.]*\./);
+      return match ? match[0] : String(text || "");
+    }
+
+    /* Shows the short result in the activity's status line and hands it to
+     * the screen reader (and self-voicing), also in the quiet stretch. */
+    function gsShowShortResult(short, show) {
+      if (!short) return;
+      try { show(short); } catch (error) { /* the screen is closing */ }
+      announceScreenReader(short, { force: true });
+    }
+
+    /* "Within the margin." from a replay description that ends with the
+     * verdict; "" when it has none. For Speech: Low (tracker 20.2). */
+    function gsVerdictFromDescribe(describe) {
+      const m = String(describe || "").match(/(within|outside) the margin\.$/);
+      return m ? `${m[1] === "within" ? "Within" : "Outside"} the margin.` : "";
     }
 
     function gsVerdictWords(within) {
@@ -2525,6 +2591,7 @@
     }
 
     function resetState(message = "Ready.") {
+      gsKeepAwakeFor("practice", false);
       clearTimeout(exemplarTimeout);
       clearExemplarVisuals();
       suppressSrAnnouncements = false;
@@ -2564,10 +2631,11 @@
     }
 
     /* ---------------- Practice flow ---------------- */
-    function recordMarker() {
+    function recordMarker(atMs = performance.now()) {
       if (!started) {
         if (!validateSetup()) return;
         started = true;
+        gsKeepAwakeFor("practice", true);
         lockModeSelection(true);
         lockSettings(true);
         markerTimes = [0];
@@ -2583,7 +2651,7 @@
         return;
       }
 
-      const elapsed = (performance.now() - startTimestamp) / 1000;
+      const elapsed = Math.max(0, atMs - startTimestamp) / 1000;
       markerTimes.push(elapsed);
       playStudentTone();
       stage += 1;
@@ -2658,22 +2726,6 @@
         };
       });
 
-      // Record every mark. Until now Practice never wrote to the log, so the
-      // Progress page stayed empty and the adaptive margin could not see it.
-      if (typeof gsLogAttempt === "function") {
-        marks.forEach(({ street, userTime, time, feedbackType, marginSec }) => {
-          gsLogAttempt({
-            activity: "practice",
-            street,
-            userSec: userTime,
-            refSec: time,
-            diffSec: userTime - time,
-            correct: feedbackType === "acceptable",
-            marginSec
-          });
-        });
-      }
-
       marks.forEach(({ time, index, label, diff, feedbackType }) => {
         playFeedbackTone(feedbackType, baseDelay + time);
         exemplarVisualTimeouts.push(
@@ -2696,6 +2748,25 @@
       const replayDoneAtSec = maxTime + baseDelay + TEST_TUNING.replayEndPadSec;
       startSynchronizedVisualReplay(visualEvents, replayDoneAtSec);
 
+      // Saved only after every replay sound and visual is scheduled: saving
+      // rewrites the whole history, and anything scheduled after it came late
+      // by that long, more so with a long history (tracker 20.10).
+      // Record every mark. Until now Practice never wrote to the log, so the
+      // Progress page stayed empty and the adaptive margin could not see it.
+      if (typeof gsLogAttempt === "function") {
+        marks.forEach(({ street, userTime, time, feedbackType, marginSec }) => {
+          gsLogAttempt({
+            activity: "practice",
+            street,
+            userSec: userTime,
+            refSec: time,
+            diffSec: userTime - time,
+            correct: feedbackType === "acceptable",
+            marginSec
+          });
+        });
+      }
+
       clearTimeout(replayTimeout);
       // What the replay was, in words, once it is over (build 15): your taps,
       // then each crossing time with its verdict. Never a number of seconds.
@@ -2708,7 +2779,11 @@
         resetState("Ready for another try.");
         renderPracticeScore();
         const said = a11ySettings.describeSounds && gsDescribe(`${describe} Ready for another try.`);
-        emitCue("replay_end", { message: "Ready for another try.", skipAnnounce: Boolean(said) });
+        // Off (Low): the verdict still shows and is read, in short (20.2).
+        const shortVerdict = marks.length > 1 ? verdicts.join(", ") : gsVerdictWords(marks[0]?.feedbackType === "acceptable");
+        const short = said ? "" : `${shortVerdict.replace(/^./, (c) => c.toUpperCase())}. Ready for another try.`;
+        if (short) setStatus(short);
+        emitCue("replay_end", { message: short || "Ready for another try.", skipAnnounce: Boolean(said) });
       }, replayDoneAtSec * 1000);
     }
 
@@ -2943,8 +3018,9 @@
       // busy, not disabled, so VoiceOver keeps its place on it.
       if (gsIsBusy(actionBtn)) return;
       ensureAudioContext();
-      if (!started) startTimestamp = performance.now();
-      recordMarker();
+      const at = gsPressTime(actionBtn);
+      if (!started) startTimestamp = at;
+      recordMarker(at);
     });
 
     modeInputs.forEach((input) => { input.addEventListener("change", updateMode); });
@@ -3358,6 +3434,37 @@
      */
     let gsWakeLock = null;
     let gsWakeWanted = false;
+
+    /* Several reasons can each keep the screen awake: an open pad, and a try
+     * from its start until its replay ends, in all four activities. A long
+     * sample on a wide street passes the 30-second auto-lock, and a locked
+     * screen hides the app and throws the try away (tracker 20.12). */
+    /*
+     * Something took the sound away in the middle of a try without hiding
+     * the app: Siri, an incoming-call banner, an alarm, another app's sound,
+     * headphones or hearing aids connecting or dropping (tracker 20.11). The
+     * sample's length is no longer what the student heard, so the activity
+     * in progress cancels the try, unrecorded, as it does when the app is
+     * hidden. Each activity listens for this event.
+     */
+    function gsAudioInterrupted(reason) {
+      const at = performance.now();
+      if (gsAudioInterrupted.lastAt && at - gsAudioInterrupted.lastAt < 300) return;
+      gsAudioInterrupted.lastAt = at;
+      try { window.dispatchEvent(new CustomEvent("gs-audio-interrupted", { detail: { reason } })); } catch (error) { /* ignore */ }
+    }
+
+    function gsKeepAwakeFor(reason, on) {
+      // Kept on the function itself: this can run while the app is still
+      // starting, before the variables above exist.
+      const reasons = gsKeepAwakeFor.reasons || (gsKeepAwakeFor.reasons = new Set());
+      if (on) reasons.add(reason);
+      else reasons.delete(reason);
+      try {
+        const want = reasons.size > 0;
+        if (want !== gsWakeWanted) gsKeepAwake(want);
+      } catch (error) { /* still starting: nothing is awake yet */ }
+    }
     async function gsKeepAwake(on) {
       gsWakeWanted = Boolean(on);
       if (isNativeShell && nativePlatform === "ios" && typeof GSNativePlugin?.keepAwake === "function") {
@@ -3446,6 +3553,11 @@
       }
     }
     if (nativeSound && typeof GSNativePlugin?.addListener === "function") {
+      try {
+        // The iPhone app says when a call, Siri or an alarm takes the sound,
+        // or the output changes (AirPods, hearing aids) (tracker 20.11).
+        GSNativePlugin.addListener("audioInterrupted", (event) => { gsAudioInterrupted(event?.reason || "native"); });
+      } catch (error) { /* older app: the web clock check still runs */ }
       try {
         GSNativePlugin.addListener("volume", () => { warnIfVolumeLow(); });
       } catch (error) {

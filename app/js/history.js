@@ -163,8 +163,12 @@ function gsExpandHistory(records = gsLoadHistory()) {
 
 function gsClearHistory() {
   try {
+    // The adaptive margins go back to the instructor's margin, but the
+    // instructor's on/off switch stays as it was set (tracker 20.8).
+    const adaptiveOn = gsAdaptiveEnabled();
     localStorage.removeItem(GS_HISTORY_KEY);
     localStorage.removeItem(GS_ADAPTIVE_KEY);
+    if (adaptiveOn) gsSaveAdaptive({ ...gsAdaptiveDefaults(), enabled: true });
     localStorage.removeItem(GS_HISTORY_TRIMMED_KEY);
     gsHistorySaveFailed = false;
   } catch (error) {
@@ -759,10 +763,24 @@ function gsCsvRow(entry, { clientCode = "", build = "" } = {}) {
       ? [h.skipped ? "" : gsCsvNumber(h.userSec), h.skipped ? "" : gsCsvNumber(h.refSec), h.skipped ? "" : gsCsvNumber(h.diffSec), h.skipped ? "cancelled" : (h.correct ? "within margin" : "outside margin")]
       : ["", "", "", ""];
   return [
-    d.toLocaleDateString(), d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit", second: "2-digit" }),
+    gsCsvDate(d), gsCsvTime(d),
     clientCode, build, label, street, entry.direction || "", entry.sense || "",
     ...main, ...howMuch, cancelled
   ].map(gsCsvCell).join(",");
+}
+
+/* The CSV's date and time are the same on every phone, whatever its
+ * language: YYYY-MM-DD and 24-hour HH:MM:SS, on the phone's own clock, so
+ * Excel reads them as dates and times and files from several testers match
+ * (tracker 20.14). The readable report keeps the phone's own formats. */
+function gsCsvDate(d) {
+  const pad = (n) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+
+function gsCsvTime(d) {
+  const pad = (n) => String(n).padStart(2, "0");
+  return `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
 }
 
 /** The whole history as CSV text, newest last. */
