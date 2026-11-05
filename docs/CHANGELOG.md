@@ -8,6 +8,22 @@ than commit history. They are accurate to the day.
 
 ---
 
+## 2026-11-05 (build 23) — the session code pop-up with VoiceOver
+
+From Cindi Lashinsky and a new tester using VoiceOver, 4 November 2026.
+
+- **Self-voicing no longer talks over VoiceOver or TalkBack.** "Speak
+  directions aloud" is meant for use without a screen reader; when VoiceOver
+  or TalkBack is running, the app now stays quiet and the screen reader says
+  everything. Before, with both on, the app's own voice spoke over VoiceOver,
+  starting with the session code pop-up.
+- **The session code field is announced as a text field.** When the pop-up
+  opens, focus goes straight to the field, so VoiceOver says "Session code,
+  text field, double tap to edit". Before, it first read the pop-up's
+  description again, and the start message was announced a second time.
+
+---
+
 ## 2026-11-04 (build 22) — Cindi's decisions on tracker items 20.5 and 20.13
 
 From Cindi Lashinsky's email of 4 November 2026, 7:57 AM.

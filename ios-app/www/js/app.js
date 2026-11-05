@@ -31,8 +31,8 @@ let gsCurrentScreen = "home";
  * and CACHE_VERSION (sw.js). In the native app the real bundle values are
  * read from the App plugin and override these. */
 const GS_APP_VERSION = "1.0";
-const GS_APP_BUILD = "22";
-const GS_APP_DATE = "4 November 2026";
+const GS_APP_BUILD = "23";
+const GS_APP_DATE = "5 November 2026";
 
 async function gsRenderAbout() {
   const el = document.getElementById("aboutVersion");
@@ -185,7 +185,7 @@ function gsShowScreen(name) {
   if (title) title.focus({ preventScroll: true });
   window.scrollTo(0, 0);
 
-  if (a11ySettings.selfVoice && name !== "home") {
+  if (gsSelfVoiceOn() && name !== "home") {
     const layout = a11ySettings.verbosity === "high" ? gsScreenLayout(name) : "";
     gsSpeak([gsScreenIntro(name), layout].filter(Boolean).join(" "));
   } else if (a11ySettings.verbosity === "high" && typeof gsScreenReaderOn === "function" && gsScreenReaderOn()) {
@@ -335,8 +335,16 @@ function gsShowSessionCodeModal(message = "") {
     setMainContentInert(true);
     dialog.showModal();
   }
-  gsSessionCodeNote(message, "neutral", "modal");
-  document.getElementById("sessionCodeModalTitle")?.focus();
+  // The pop-up's own text already says what to do. The note stays for
+  // later messages ("That code did not match"), so opening it is not
+  // announced twice. Focus goes straight to the field: VoiceOver says
+  // "Session code, text field, double tap to edit" (Cindi, 4 Nov 2026).
+  const { note, input } = gsCodeField("modal");
+  if (note) { note.textContent = ""; note.dataset.tone = "neutral"; }
+  if (message && gsSelfVoiceOn()) gsSpeak(message);
+  setTimeout(() => {
+    if (dialog.open) (input || document.getElementById("sessionCodeModalTitle"))?.focus();
+  }, 50);
 }
 
 function gsCloseSessionCodeModal() {
@@ -555,7 +563,7 @@ function gsShowDisclaimer({ thenTutorial = false } = {}) {
     dialog.showModal();
   }
   document.getElementById("disclaimerTitle")?.focus();
-  if (a11ySettings.selfVoice) {
+  if (gsSelfVoiceOn()) {
     gsSpeak([...dialog.querySelectorAll(".disclaimer-text")].map((p) => p.textContent).join(" "));
   }
 }

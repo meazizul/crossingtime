@@ -1047,7 +1047,7 @@ function gsCompareAskAnswer() {
  * and the instructions either way.
  */
 function gsAnnouncePad(title, swipeInstructions) {
-  if (a11ySettings.selfVoice) {
+  if (gsSelfVoiceOn()) {
     gsSpeak(gsPadSwipesOn() ? `${title} ${swipeInstructions}` : title);
     return;
   }

@@ -199,7 +199,7 @@ test("web build keeps pinch zoom but blocks double-tap zoom; Help shows the buil
   expect(await page.evaluate(() => getComputedStyle(document.body).touchAction)).toBe("manipulation");
   expect(await page.evaluate(() => getComputedStyle(document.getElementById("settingsTrigger")).touchAction)).toBe("manipulation");
   await page.evaluate(() => gsShowScreen("help"));
-  await expect(page.locator("#aboutVersion")).toHaveText("CrossingTime version 1.0, build 22 (web), 4 November 2026.");
+  await expect(page.locator("#aboutVersion")).toHaveText("CrossingTime version 1.0, build 23 (web), 5 November 2026.");
 });
 
 test("native shell: pinch zoom allowed, bundle version, CrossingTime haptics plugin, playback audio session", async ({ page }) => {
@@ -229,7 +229,7 @@ test("native shell: pinch zoom allowed, bundle version, CrossingTime haptics plu
   expect(meta).not.toContain("user-scalable=no");
   expect(meta).not.toContain("maximum-scale=1");
   await page.evaluate(() => gsShowScreen("help"));
-  await expect(page.locator("#aboutVersion")).toHaveText("CrossingTime version 1.0, build 13 (iPhone app), 4 November 2026.");   // the stubbed App plugin reports build 13
+  await expect(page.locator("#aboutVersion")).toHaveText("CrossingTime version 1.0, build 13 (iPhone app), 5 November 2026.");   // the stubbed App plugin reports build 13
   await expect(page.locator("#hapticsSupportNote")).toContainText("Native haptics active");
   await page.evaluate(() => { hapticCue("marker"); hapticCue("reference_ok"); hapticCue("reference_bad"); hapticCue("ready"); });
   expect(await page.evaluate(() => window.__haptics)).toEqual(["marker", "reference_ok", "reference_bad", "ready"]);
@@ -346,7 +346,7 @@ test("service worker: fetches fresh files online and still works offline", async
   await page.waitForFunction(async () => (await navigator.serviceWorker.ready).active?.state === "activated", null, { timeout: 15000 });
   await page.reload();
   await page.waitForFunction(() => Boolean(navigator.serviceWorker.controller), null, { timeout: 15000 });
-  expect(await page.evaluate(async () => (await caches.keys()))).toContain("gapsense-v23");
+  expect(await page.evaluate(async () => (await caches.keys()))).toContain("gapsense-v24");
   await context.setOffline(true);
   await page.reload();
   await expect(page.locator("#screen-home")).toBeVisible();

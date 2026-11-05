@@ -508,7 +508,9 @@ directions and results, for students still learning VoiceOver or TalkBack. A
 **Speaking rate** sets slower, normal or faster. Speech always stops while a
 sound is being timed. On iPhone and Android the app speaks through the
 system's own voice (the Android app only since build 15; before that the
-Android web view had no speech engine and said nothing).
+Android web view had no speech engine and said nothing). When VoiceOver or
+TalkBack is running, the app does not speak for itself, so the two never talk
+over each other (build 23); the screen reader says everything instead.
 
 **How much the app says (verbosity)**, build 20, like a screen reader's:
 

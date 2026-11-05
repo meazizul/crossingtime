@@ -50,7 +50,8 @@ test("locked: the pop-up asks for the code; Later leaves Home usable but locked"
   await openApp(page, { locked: true });
   const modal = page.locator("#sessionCodeModal");
   await expect(modal).toBeVisible();
-  expect(await page.evaluate(() => document.activeElement?.id)).toBe("sessionCodeModalTitle");
+  // Build 23: focus goes straight to the field (VoiceOver: "Session code, text field").
+  await expect.poll(() => page.evaluate(() => document.activeElement?.id)).toBe("sessionCodeModalInput");
   expect(await page.evaluate(() => document.querySelector("main")?.inert)).toBe(true);
   await page.click("#sessionCodeLaterBtn");
   await expect(modal).toBeHidden();
@@ -176,7 +177,7 @@ test("the app is CrossingTime everywhere a user reads the name", async ({ page }
   expect(await page.title()).toContain("CrossingTime");
   await expect(page.locator("#screenTitle")).toHaveText("CrossingTime");
   await page.evaluate(() => gsShowScreen("help"));
-  await expect(page.locator("#aboutVersion")).toContainText("CrossingTime version 1.0, build 22");
+  await expect(page.locator("#aboutVersion")).toContainText("CrossingTime version 1.0, build 23");
   const manifest = await page.evaluate(async () => (await (await fetch("manifest.webmanifest")).json()));
   expect(manifest.name).toBe("CrossingTime");
   expect(await page.evaluate(() => document.body.innerText.includes("Gap Sense"))).toBe(false);
