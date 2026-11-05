@@ -2180,7 +2180,7 @@
       // Self-voicing speaks every announcement aloud, whether or not a screen
       // reader is running. It is the student's choice, under Accessibility.
       // Never while a practice crossing is being timed.
-      if (speak && a11ySettings.selfVoice && !started) gsSpeak(message);
+      if (speak && gsSelfVoiceOn() && !started) gsSpeak(message);
       if (!a11ySettings.announceCues) return;
       srAnnounceToggle = !srAnnounceToggle;
       srAnnouncer.textContent = srAnnounceToggle ? message : `${message}​`;
@@ -2340,6 +2340,14 @@
 
     function gsScreenReaderOn() {
       return typeof window.__gsScreenReader === "boolean" ? window.__gsScreenReader : gsScreenReaderRunning;
+    }
+
+    /* Self-voicing is "for use without VoiceOver or TalkBack" (Settings).
+     * With a screen reader running the app stays quiet and leaves the
+     * talking to the screen reader, so the two never speak over each other
+     * (Cindi and a tester, 4 Nov 2026, on the session code pop-up). */
+    function gsSelfVoiceOn() {
+      return Boolean(a11ySettings.selfVoice) && !gsScreenReaderOn();
     }
 
     /* Asks the native shell whether VoiceOver or TalkBack is on. The web
