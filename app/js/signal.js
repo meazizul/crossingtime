@@ -169,15 +169,19 @@ function gsSignalPress(atMs) {
     // the interval or for any feedback sound. Shown on screen for everyone.
     // If there is no speech (or visual-only mode), the screen reader says it.
     gsSignalStatus("Get ready. Wait for the sound.", "neutral", { announce: false });
-    const spoke = gsSpeak("Get ready", {
-      interrupt: true,
-      maxWaitMs: 2500,
-      onDone: () => {
-        if (gsSignalState.phase !== "ready" || session !== gsSignalState.session) return;
-        gsSignalState.phase = "waiting";
-        gsLater(gsSignalTimers, gsSignalFire, gsSignalWaitSec());
-      }
-    });
+    const startWait = () => {
+      if (gsSignalState.phase !== "ready" || session !== gsSignalState.session) return;
+      gsSignalState.phase = "waiting";
+      gsLater(gsSignalTimers, gsSignalFire, gsSignalWaitSec());
+    };
+    // With VoiceOver or TalkBack the screen reader says it, never the app's
+    // own voice, and the wait starts when the words are over (tracker 22.1,
+    // 22.8).
+    if (typeof gsScreenReaderOn === "function" && gsScreenReaderOn()) {
+      gsScreenReaderSay("Get ready. Wait for the sound.", { onDone: startWait });
+      return;
+    }
+    const spoke = gsSpeak("Get ready", { interrupt: true, maxWaitMs: 2500, onDone: startWait });
     if (!spoke) announceScreenReader("Get ready. Wait for the sound.");
     return;
   }

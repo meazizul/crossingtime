@@ -801,7 +801,15 @@ html { background: var(--bg); min-height: 100%; }
       width: min(640px, 100%);
       min-width: 0;
       max-height: min(760px, calc(var(--viewport-height) - env(safe-area-inset-top) - env(safe-area-inset-bottom) - 20px));
-      overflow: auto;
+      /* Up and down only (tracker 22.4). At large text sizes one long word
+       * ("Announcements", "Accessibility") was wider than the card and the
+       * dialog could be dragged sideways; now any word too long for its line
+       * breaks, so nothing is wider than the card and nothing is cut off. */
+      overflow-x: hidden;
+      overflow-y: auto;
+      overflow-wrap: anywhere;
+      -webkit-hyphens: auto;
+      hyphens: auto;
       overscroll-behavior: contain;
       -webkit-overflow-scrolling: touch;
       box-shadow: var(--shadow-lg);
@@ -2062,6 +2070,16 @@ body[data-theme="inverted"] .gesture-arrow { color: var(--text); }
 .gesture-overlay .answer-grid { flex: 0 0 auto; }
 .gesture-overlay.buttons-only .answer-grid { flex: 1 1 auto; align-content: center; }
 .gesture-overlay.buttons-only .answer-btn { min-height: 5rem; }
+/* Build 24 (tracker 22.6, first part): with buttons only there are no swipes
+   to protect, so the answer pad scrolls up and down and its text follows the
+   student's text size, with no cap. The swipe pads keep their caps for now. */
+#answerOverlay.buttons-only { overflow-y: auto; touch-action: pan-y; }
+#answerOverlay.buttons-only .gesture-title { font-size: 1.15rem; line-height: 1.2; }
+#answerOverlay.buttons-only .gesture-status { font-size: 1rem; line-height: 1.25; }
+#answerOverlay.buttons-only .settings-action { font-size: 1rem; }
+#answerOverlay.buttons-only .answer-grid { flex: 0 0 auto; }
+#answerOverlay.buttons-only .answer-btn { font-size: 1.02rem; min-height: 5rem; height: auto; }
+#answerOverlay.buttons-only .answer-glyph { font-size: 1.7rem; }
 .howmuch-btn { flex: 1 1 auto; height: auto; min-height: 12rem; }
 body.pad-open { overflow: hidden; }
 

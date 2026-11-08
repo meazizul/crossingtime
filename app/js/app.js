@@ -31,8 +31,8 @@ let gsCurrentScreen = "home";
  * and CACHE_VERSION (sw.js). In the native app the real bundle values are
  * read from the App plugin and override these. */
 const GS_APP_VERSION = "1.0";
-const GS_APP_BUILD = "23";
-const GS_APP_DATE = "5 November 2026";
+const GS_APP_BUILD = "24";
+const GS_APP_DATE = "7 November 2026";
 
 async function gsRenderAbout() {
   const el = document.getElementById("aboutVersion");
@@ -1077,7 +1077,9 @@ function gsTutorialDemo(kind) {
     announceScreenReader("That is a sample warning time. One steady sound, then it stops.");
   } else if (kind === "ready") {
     hapticCue("ready");
-    if (!gsSpeak("Get ready")) announceScreenReader("Get ready.");
+    // With a screen reader running, it says it, not the app's voice (22.1).
+    if (typeof gsScreenReaderOn === "function" && gsScreenReaderOn()) announceScreenReader("Get ready.", { speak: false });
+    else if (!gsSpeak("Get ready")) announceScreenReader("Get ready.");
   } else {
     playUserMarkerTone(0.05);
     announceScreenReader("That is your own sound.");

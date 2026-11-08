@@ -103,11 +103,43 @@ function gsCrossingTimeFor(street) {
   return street === "half" ? times.clearTime : times.fullTime;
 }
 
-/** True category of an interval relative to the crossing time. */
-function gsClassifyInterval(intervalSec, crossingSec, marginSec) {
+/**
+ * True category of an interval relative to the crossing time. `rangeSec` is
+ * the "about the same" range: k x the crossing time since build 24 (tracker
+ * 20.16), no longer the margin of error.
+ */
+function gsClassifyInterval(intervalSec, crossingSec, rangeSec) {
   const diff = intervalSec - crossingSec;
-  if (Math.abs(diff) <= marginSec) return "same";
+  if (Math.abs(diff) <= rangeSec) return "same";
   return diff > 0 ? "longer" : "shorter";
+}
+
+/* The "about the same" range for a crossing time: k x the crossing time. */
+function gsSameRangeSec(crossingSec) {
+  const k = typeof gsSameRangeK === "function" ? gsSameRangeK() : 0.12;
+  return Math.max(0, k * crossingSec);
+}
+
+/**
+ * Every answer that counts as correct (design: Cindi, Nov 7 2026; tracker
+ * 20.16). Inside the range "about the same" is correct, and so is the true
+ * direction: 7.2 s against a 7 s crossing may be answered "about the same" or
+ * "longer". Exactly the crossing time is only "about the same". Outside the
+ * range only the true direction is correct.
+ */
+function gsAcceptedAnswers(intervalSec, crossingSec, rangeSec) {
+  const diff = intervalSec - crossingSec;
+  if (Math.abs(diff) > rangeSec) return [diff > 0 ? "longer" : "shorter"];
+  if (Math.abs(diff) < 0.0005) return ["same"];
+  return ["same", diff > 0 ? "longer" : "shorter"];
+}
+
+/* What the student is told after a wrong answer: the category, and for a
+ * close call which way it leaned. */
+function gsAnswerTruthWords(intervalSec, crossingSec, rangeSec) {
+  const accepted = gsAcceptedAnswers(intervalSec, crossingSec, rangeSec);
+  if (accepted.length === 2) return `about the same, a little ${accepted[1]}`;
+  return gsAnswerWords(accepted[0]);
 }
 
 /* ---------------- Sample loudness and pitch ----------------
@@ -905,6 +937,7 @@ const gsCompareState = {
   intervalSec: 0,
   crossingSec: 0,
   marginSec: 0.4,
+  rangeSec: 0.4, // the "about the same" range for this trial (20.16)
   expected: "same",
   phase: "idle", // idle | waiting | playing | answering | judged | howmuch | replaying
   lastDescribe: "" // what the last replay was, in words (build 15)
@@ -918,26 +951,27 @@ function gsCompareMargin() {
  * Build a trial. Categories are drawn evenly so the student cannot learn a
  * base rate, and the magnitude is scaled to the crossing time so the task
  * stays proportionally as hard on a wide street as a narrow one. The interval
- * is then re-checked against the margin so the stored category is always the
- * one the student will be judged against.
+ * is then re-checked against the "about the same" range (k x the crossing
+ * time, tracker 20.16) so the stored category is always the one the student
+ * will be judged against.
  */
-function gsBuildTrial(crossingSec, marginSec) {
+function gsBuildTrial(crossingSec, rangeSec) {
   const category = GS_ANSWERS[Math.floor(Math.random() * GS_ANSWERS.length)];
   const rand = (lo, hi) => lo + Math.random() * (hi - lo);
   let interval;
 
   if (category === "same") {
-    // Inside the margin, but rarely dead-on: that would be too easy.
-    interval = crossingSec + rand(-marginSec * 0.85, marginSec * 0.85);
+    // Inside the range, but rarely dead-on: that would be too easy.
+    interval = crossingSec + rand(-rangeSec * 0.85, rangeSec * 0.85);
   } else if (category === "longer") {
-    interval = crossingSec + rand(marginSec * 1.4, Math.max(marginSec * 2.2, crossingSec * 0.8));
+    interval = crossingSec + rand(rangeSec * 1.4, Math.max(rangeSec * 2.2, crossingSec * 0.8));
   } else {
     const floor = Math.max(0.6, crossingSec * 0.35);
-    interval = Math.max(floor, crossingSec - rand(marginSec * 1.4, Math.max(marginSec * 2.2, crossingSec * 0.55)));
+    interval = Math.max(floor, crossingSec - rand(rangeSec * 1.4, Math.max(rangeSec * 2.2, crossingSec * 0.55)));
   }
 
   interval = Math.max(0.5, interval);
-  return { interval, category: gsClassifyInterval(interval, crossingSec, marginSec) };
+  return { interval, category: gsClassifyInterval(interval, crossingSec, rangeSec) };
 }
 
 function gsCompareStatus(message, tone = "neutral", { announce = true } = {}) {
@@ -1005,22 +1039,22 @@ function gsCompareBegin() {
   }
 
   const margin = gsCompareMargin();
-  const trial = gsBuildTrial(crossingSec, margin);
+  const range = gsSameRangeSec(crossingSec);
+  const trial = gsBuildTrial(crossingSec, range);
   gsCompareState.intervalSec = trial.interval;
   gsCompareState.crossingSec = crossingSec;
   gsCompareState.marginSec = margin;
+  gsCompareState.rangeSec = range;
   gsCompareState.expected = trial.category;
   gsCompareState.phase = "waiting";
   gsPlayAgainClear("compare");
 
   gsCompareSetStartEnabled(false, "Listen…");
   const randomPause = gsCompareRandomDelayEnabled();
-  // Announced before speech is suppressed, so a screen-reader user hears it.
-  gsCompareStatus(randomPause
+  const lead = randomPause
     ? "Get ready. The sample warning time will start after a pause."
-    : "Listen to the sample warning time.");
-
-  gsAfterSpeech(gsCompareTimers, () => {
+    : "Listen to the sample warning time.";
+  const startSample = () => {
     const delaySec = randomPause ? 1.2 + Math.random() * 3 : 0.35;
     gsLater(gsCompareTimers, () => {
       gsCompareState.phase = "playing";
@@ -1028,7 +1062,21 @@ function gsCompareBegin() {
       gsPlaySample(trial.interval, 0.05, gsCompareStyle());
       gsLater(gsCompareTimers, gsCompareAskAnswer, 0.05 + trial.interval + 0.4);
     }, delaySec);
-  });
+  };
+  // With VoiceOver or TalkBack the sample waits until the screen reader has
+  // finished the words, so they never overlap (tracker 22.8).
+  if (typeof gsScreenReaderOn === "function" && gsScreenReaderOn()) {
+    gsCompareStatus(lead, "neutral", { announce: false });
+    // Only if this same try is still waiting (not cancelled or replaced).
+    gsScreenReaderSay(lead, { onDone: () => {
+      if (gsCompareState.phase !== "waiting" || gsCompareState.intervalSec !== trial.interval) return;
+      startSample();
+    } });
+    return;
+  }
+  // Announced before speech is suppressed, so a screen-reader user hears it.
+  gsCompareStatus(lead);
+  gsAfterSpeech(gsCompareTimers, startSample);
 }
 
 function gsCompareAskAnswer() {
@@ -1060,7 +1108,8 @@ function gsCompareAnswer(answer) {
   gsCompareState.phase = "judged";
   gsCloseAnswerPad();
 
-  const correct = answer === gsCompareState.expected;
+  const accepted = gsAcceptedAnswers(gsCompareState.intervalSec, gsCompareState.crossingSec, gsCompareState.rangeSec);
+  const correct = accepted.includes(answer);
   const diff = gsCompareState.intervalSec - gsCompareState.crossingSec;
 
   gsLogAttempt({
@@ -1071,6 +1120,8 @@ function gsCompareAnswer(answer) {
     diffSec: diff,
     correct,
     marginSec: gsCompareState.marginSec,
+    sameRangeSec: gsCompareState.rangeSec,
+    accepted,
     answer,
     expected: gsCompareState.expected
   });
@@ -1086,11 +1137,13 @@ function gsCompareAnswer(answer) {
   // Build 15: the result in words after the sound, for everyone, and the
   // next step waits for the words, so they are never cut off (the reason
   // words were removed in 12.29). Off under Accessibility > Speech.
-  const verdict = correct ? "Correct." : `Not correct. It was ${gsAnswerWords(gsCompareState.expected)}.`;
+  const verdict = correct ? "Correct." : `Not correct. It was ${gsAnswerTruthWords(gsCompareState.intervalSec, gsCompareState.crossingSec, gsCompareState.rangeSec)}.`;
   gsCompareState.lastDescribe = "That was the sample warning time, then your own sound where your crossing time ends.";
 
   // "How much" only makes sense when the student got the direction right:
   // if they could not tell longer from shorter, they cannot judge how much.
+  // Not inside the "about the same" range either: there is no "how much" to
+  // tap out, even when "longer" or "shorter" was accepted there.
   const offerHowMuch = correct && gsCompareState.expected !== "same" && gsCompareHowMuchEnabled();
   gsDescribeThen(gsCompareTimers, verdict, () => {
     if (gsCompareState.phase !== "judged") return;
@@ -1169,6 +1222,7 @@ function gsCompareBack() {
     diffSec: gsCompareState.intervalSec - gsCompareState.crossingSec,
     correct: false,
     marginSec: gsCompareState.marginSec,
+    sameRangeSec: gsCompareState.rangeSec,
     expected: gsCompareState.expected,
     skipped: true,
     skip: "judgment"
@@ -1308,6 +1362,7 @@ const gsLiveState = {
   warningSec: 0,
   crossingSec: 0,
   marginSec: 0.4,
+  rangeSec: 0.4, // the "about the same" range for this vehicle (20.16)
   category: "same",
   renderedPhase: ""
 };
@@ -1551,7 +1606,8 @@ function gsLiveArrived(atMs) {
   gsLiveState.warningSec = warningSec;
   gsLiveState.crossingSec = gsCrossingTimeFor(street);
   gsLiveState.marginSec = gsEffectiveMargin("live", street);
-  gsLiveState.category = gsClassifyInterval(warningSec, gsLiveState.crossingSec, gsLiveState.marginSec);
+  gsLiveState.rangeSec = gsSameRangeSec(gsLiveState.crossingSec);
+  gsLiveState.category = gsClassifyInterval(warningSec, gsLiveState.crossingSec, gsLiveState.rangeSec);
   // One confirmation, like the swipe for a vehicle (it used to vibrate twice).
   gsLiveConfirm("marker");
 
@@ -1582,6 +1638,8 @@ function gsLiveLog({ judged, answer, correct }) {
     diffSec: gsLiveState.warningSec - gsLiveState.crossingSec,
     correct,
     marginSec: gsLiveState.marginSec,
+    sameRangeSec: gsLiveState.rangeSec,
+    accepted: judged ? gsAcceptedAnswers(gsLiveState.warningSec, gsLiveState.crossingSec, gsLiveState.rangeSec) : undefined,
     answer,
     expected: gsLiveState.category
   });
@@ -1589,13 +1647,13 @@ function gsLiveLog({ judged, answer, correct }) {
 
 function gsLiveAnswer(answer) {
   if (gsLiveState.phase !== "judging") return;
-  const correct = answer === gsLiveState.category;
+  const correct = gsAcceptedAnswers(gsLiveState.warningSec, gsLiveState.crossingSec, gsLiveState.rangeSec).includes(answer);
   gsLiveLog({ judged: true, answer, correct });
   // The cue carries the result, then the result in words (build 15); the
   // next step waits for the words so they are never cut off (12.29).
   gsShowResult(correct);
   gsLiveStatus("", "neutral", { announce: false });
-  const verdict = correct ? "Correct." : `Not correct. It was ${gsAnswerWords(gsLiveState.category)}.`;
+  const verdict = correct ? "Correct." : `Not correct. It was ${gsAnswerTruthWords(gsLiveState.warningSec, gsLiveState.crossingSec, gsLiveState.rangeSec)}.`;
 
   const offerHowMuch = correct && gsLiveState.category !== "same" && gsLiveHowMuchEnabled();
   if (offerHowMuch) {
@@ -1635,6 +1693,7 @@ function gsLiveJudgmentBack() {
     diffSec: gsLiveState.warningSec - gsLiveState.crossingSec,
     correct: false,
     marginSec: gsLiveState.marginSec,
+    sameRangeSec: gsLiveState.rangeSec,
     expected: gsLiveState.category
   });
   gsLiveState.phase = "detect";
