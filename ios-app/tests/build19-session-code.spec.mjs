@@ -177,7 +177,7 @@ test("the app is CrossingTime everywhere a user reads the name", async ({ page }
   expect(await page.title()).toContain("CrossingTime");
   await expect(page.locator("#screenTitle")).toHaveText("CrossingTime");
   await page.evaluate(() => gsShowScreen("help"));
-  await expect(page.locator("#aboutVersion")).toContainText("CrossingTime version 1.0, build 24");
+  await expect(page.locator("#aboutVersion")).toContainText("CrossingTime version 1.0, build 25");
   const manifest = await page.evaluate(async () => (await (await fetch("manifest.webmanifest")).json()));
   expect(manifest.name).toBe("CrossingTime");
   expect(await page.evaluate(() => document.body.innerText.includes("Gap Sense"))).toBe(false);

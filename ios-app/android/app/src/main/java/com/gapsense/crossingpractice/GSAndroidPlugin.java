@@ -2,7 +2,14 @@ package com.gapsense.crossingpractice;
 
 import android.content.Context;
 import android.graphics.Color;
+import android.media.AudioAttributes;
+import android.media.AudioManager;
+import android.media.AudioPlaybackConfiguration;
+import android.os.Build;
 import android.os.Bundle;
+import android.os.Handler;
+import android.os.Looper;
+import android.os.SystemClock;
 import android.speech.tts.TextToSpeech;
 import android.speech.tts.UtteranceProgressListener;
 import android.view.Window;
@@ -128,6 +135,7 @@ public class GSAndroidPlugin extends Plugin {
         String text = call.getString("text", "");
         float rate = call.getFloat("rate", 1f);
         boolean interrupt = call.getBoolean("interrupt", true);
+        final boolean accessibilityStream = "accessibility".equals(call.getString("usage", ""));
         if (text == null || text.isEmpty() || tts == null || !ttsReady) {
             // No engine (or not ready yet): the page's own timeout takes over.
             call.resolve();
@@ -143,6 +151,12 @@ public class GSAndroidPlugin extends Plugin {
             try {
                 tts.setSpeechRate(Math.max(0.5f, Math.min(2f, rate)));
                 Bundle params = new Bundle();
+                // Self-test only (build 25): speak as accessibility audio, the
+                // way TalkBack's voice plays, so waitForSpeech can be checked
+                // on a phone or emulator without TalkBack.
+                if (accessibilityStream && Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                    params.putInt(TextToSpeech.Engine.KEY_PARAM_STREAM, AudioManager.STREAM_ACCESSIBILITY);
+                }
                 int queued = tts.speak(text, interrupt ? TextToSpeech.QUEUE_FLUSH : TextToSpeech.QUEUE_ADD, params, id);
                 if (queued != TextToSpeech.SUCCESS) finish(id);
             } catch (RuntimeException error) {
@@ -204,5 +218,70 @@ public class GSAndroidPlugin extends Plugin {
         com.getcapacitor.JSObject result = new com.getcapacitor.JSObject();
         result.put("screenReader", screenReaderOn());
         call.resolve(result);
+    }
+
+    /*
+     * waitForSpeech (build 25, tracker 22.8): Android never tells an app when
+     * TalkBack has finished reading something, but it does say which sounds
+     * are playing and what they are for, and TalkBack's voice plays as
+     * accessibility audio. After the page has handed TalkBack some text, this
+     * waits for that audio to start and then to stay quiet for quietMs, and
+     * resolves { heard: true }. If none starts within startWithinMs (TalkBack's
+     * voice muted, an older phone, a phone that does not report it), it
+     * resolves { heard: false } and the page keeps its estimate. maxMs is the
+     * longest it ever waits.
+     */
+    private final Handler speechHandler = new Handler(Looper.getMainLooper());
+
+    private boolean accessibilityAudioPlaying(AudioManager audio) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return false;
+        try {
+            for (AudioPlaybackConfiguration config : audio.getActivePlaybackConfigurations()) {
+                AudioAttributes attributes = config.getAudioAttributes();
+                if (attributes != null && attributes.getUsage() == AudioAttributes.USAGE_ASSISTANCE_ACCESSIBILITY) return true;
+            }
+        } catch (RuntimeException ignored) { }
+        return false;
+    }
+
+    @PluginMethod
+    public void waitForSpeech(PluginCall call) {
+        final int startWithinMs = call.getInt("startWithinMs", 2500);
+        final int quietMs = call.getInt("quietMs", 450);
+        final int maxMs = call.getInt("maxMs", 15000);
+        final AudioManager audio = (AudioManager) getContext().getSystemService(Context.AUDIO_SERVICE);
+        if (audio == null || Build.VERSION.SDK_INT < Build.VERSION_CODES.O) {
+            com.getcapacitor.JSObject result = new com.getcapacitor.JSObject();
+            result.put("heard", false);
+            result.put("supported", false);
+            call.resolve(result);
+            return;
+        }
+        final long startedAt = SystemClock.uptimeMillis();
+        speechHandler.post(new Runnable() {
+            boolean heard = false;
+            long lastPlayingAt = 0;
+
+            private void finish(boolean ended) {
+                com.getcapacitor.JSObject result = new com.getcapacitor.JSObject();
+                result.put("heard", heard);
+                result.put("ended", ended);
+                result.put("ms", SystemClock.uptimeMillis() - startedAt);
+                call.resolve(result);
+            }
+
+            @Override
+            public void run() {
+                long now = SystemClock.uptimeMillis();
+                if (accessibilityAudioPlaying(audio)) {
+                    heard = true;
+                    lastPlayingAt = now;
+                }
+                if (heard && now - lastPlayingAt >= quietMs) { finish(true); return; }
+                if (!heard && now - startedAt >= startWithinMs) { finish(false); return; }
+                if (now - startedAt >= maxMs) { finish(false); return; }
+                speechHandler.postDelayed(this, 50);
+            }
+        });
     }
 }

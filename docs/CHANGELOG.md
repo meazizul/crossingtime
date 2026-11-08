@@ -8,6 +8,44 @@ than commit history. They are accurate to the day.
 
 ---
 
+## 2026-11-08 (build 25) — the rest of 22.6 and 22.8: every label readable, and the screen reader always finishes first
+
+From Cindi Lashinsky's bug tracker (items 22.6 and 22.8, whose first parts
+shipped in build 24).
+
+- **"Replay" through the screen reader, then the replay (22.8).** With
+  VoiceOver or TalkBack on, the word "Replay" goes to the screen reader first
+  and the replay's sounds are only scheduled once it is over, in every
+  activity and for Play it again. Back while the word is being read means no
+  replay (a Practice try is still recorded).
+- **Android waits for TalkBack's voice to stop (22.8).** Android does not tell
+  an app when TalkBack has finished, but it does report which sounds are
+  playing; TalkBack's voice plays as accessibility audio. After handing
+  TalkBack a message the app waits for that audio to start and then go quiet.
+  Checked on an Android 16 emulator with TalkBack and Google's speech engine:
+  "Replay" took 1.2 s (the old estimate was 1.5 s), a 19-word description
+  6.8 s (estimate 9.2 s), and a 9-word message 5.6 s, longer than its 5.1 s
+  estimate, which is how a tone could start under the words. A phone that does
+  not report TalkBack's voice keeps the estimate and never waits longer than
+  build 24 did.
+- **Every pad's words fit (22.6).** At the largest text sizes on an iPhone SE
+  the answer pad's question started above the swipe area and "Down: shorter"
+  ended below it, so both were cut off. The swipe area's words are now as
+  large as the pad can hold on one screen, never larger than the student's
+  size. Nothing on the pads was reworded.
+- **Read it larger (22.6).** At the larger text sizes (130% and up, without a
+  screen reader) a line at the foot of the swipe area says "Press and hold to
+  read it larger". A press and hold there, without moving, opens the pad's
+  title, message, question and instructions at the student's own size,
+  scrolling if needed; Close, Back or Escape returns to the pad. A press and
+  hold is never an answer; a quick tap and a slow swipe still are.
+- **Street pad with buttons only, and "How much" (22.6).** Like the answer pad
+  in build 24, the street pad with buttons only scrolls and its buttons follow
+  the text size; the "How much" button's words do too.
+- **Tests.** 15 new tests (`build25-replay-word-and-read-larger.spec.mjs`). The
+  practice timing test now pauses its clock, so a slow audio start-up on the
+  test machine can no longer count as the student's time.
+
 ## 2026-11-07 (build 24) — "about the same", screen readers, dialogs and the volume tip
 
 From Cindi Lashinsky's bug tracker (items 20.16 and 22.1 to 22.8) and the

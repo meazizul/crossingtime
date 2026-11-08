@@ -572,10 +572,48 @@ window.visualViewport?.addEventListener("scroll", () => { if (gsOpenPads > 0) gs
 // moves; the native area used to stay where it was (bug 38, Oct 2026 review).
 if (typeof ResizeObserver === "function") {
   const gsDirectTouchObserver = new ResizeObserver(() => { if (gsOpenPads > 0) gsDirectTouchSync(); });
+  // Build 25 (22.6): a swipe area that changes size fits its words again.
+  // (Fitting changes only the words inside, never the area, so no loop.)
+  const gsPadFitObserver = new ResizeObserver((entries) => entries.forEach((entry) => gsPadFitText(entry.target)));
   document.addEventListener("DOMContentLoaded", () => {
     document.querySelectorAll(".gesture-overlay, .gesture-overlay > *").forEach((el) => gsDirectTouchObserver.observe(el));
+    document.querySelectorAll(".gesture-overlay .gesture-surface").forEach((el) => gsPadFitObserver.observe(el));
   });
 }
+
+/*
+ * Build 25 (tracker 22.6): the swipe area's words as large as the pad can
+ * hold on one screen, and never larger than the student's own size. In
+ * build 24, at 300% on an iPhone SE, the first line of the question and
+ * "Down: shorter" were below and above the edges of the area and cut off.
+ * Past this point the student reads them at full size with a press and hold
+ * ("Read it larger").
+ */
+function gsPadFitText(surface) {
+  if (!surface || surface.hidden || !surface.isConnected) return;
+  surface.style.fontSize = "";
+  const children = [...surface.children].filter((el) => getComputedStyle(el).display !== "none");
+  if (!children.length) return;
+  const style = getComputedStyle(surface);
+  const available = surface.clientHeight - parseFloat(style.paddingTop) - parseFloat(style.paddingBottom);
+  if (!(available > 0)) return;
+  const needed = () => children[children.length - 1].getBoundingClientRect().bottom - children[0].getBoundingClientRect().top;
+  if (needed() <= available + 0.5) return;
+  const natural = parseFloat(style.fontSize);
+  let lo = Math.min(12, natural);
+  let hi = natural;
+  for (let i = 0; i < 10; i += 1) {
+    const mid = (lo + hi) / 2;
+    surface.style.fontSize = `${mid}px`;
+    if (needed() <= available) lo = mid; else hi = mid;
+  }
+  surface.style.fontSize = `${Math.floor(lo * 10) / 10}px`;
+}
+
+function gsPadFitAll() {
+  document.querySelectorAll(".gesture-overlay:not([hidden]) .gesture-surface:not([hidden])").forEach(gsPadFitText);
+}
+window.addEventListener("resize", () => { if (gsOpenPads > 0) gsPadFitAll(); });
 
 /*
  * What the pads receive, for checking screen readers on real phones
@@ -645,6 +683,8 @@ function gsShowPad(el, { opener = document.activeElement } = {}) {
   gsDirectTouchSync({ focus: true });
   if (typeof setMainContentInert === "function") setMainContentInert(true);
   document.body.classList.add("pad-open");
+  gsPadHoldSync();
+  gsPadFitAll();
 }
 
 /*
@@ -656,6 +696,7 @@ function gsShowPad(el, { opener = document.activeElement } = {}) {
  */
 function gsHidePad(el, { focusTo = null } = {}) {
   if (!el || el.hidden) return;
+  if (document.getElementById("padReadOverlay")?.gsFrom === el) gsPadReadClose();
   const below = gsPadStackSync(el);
   const hadFocus = el.contains(document.activeElement) || document.activeElement === document.body;
   gsOpenPads = Math.max(0, gsOpenPads - 1);
@@ -685,8 +726,10 @@ function gsHidePad(el, { focusTo = null } = {}) {
 
 const gsPadBackHandlers = new Map();
 
-/* Back on whichever pad is on top. Returns false when no pad is open. */
+/* Back on whichever pad is on top. Returns false when no pad is open.
+ * With "Read it larger" open, Back (or Escape) closes that first. */
 function gsPadBack() {
+  if (gsPadReadClose()) return true;
   const top = gsTopPad();
   if (!top) return false;
   const fn = gsPadBackHandlers.get(top.id);
@@ -701,6 +744,72 @@ document.addEventListener("keydown", (event) => {
 });
 
 const GS_SWIPE_MIN_PX = 36;
+
+/* ---------------- Read it larger (build 25, tracker 22.6) ----------------
+ * A swipe pad fills one screen and cannot scroll, so at the largest text
+ * sizes its words are smaller than the student's own size. With large text
+ * and no screen reader (which reads every label anyway), a press and hold
+ * on the swipe area, without moving, opens "Read it larger": the pad's
+ * title, message, question and instructions at the student's size. A press
+ * and hold is never an answer (Done when, 22.6). */
+const GS_HOLD_MS = 800;
+
+function gsPadHoldEnabled() {
+  return document.body.classList.contains("large-text-layout")
+    && !(typeof gsScreenReaderOn === "function" && gsScreenReaderOn());
+}
+
+function gsPadHoldSync() {
+  document.body.classList.toggle("pad-hold", gsPadHoldEnabled());
+}
+
+function gsPadReadIsOpen() {
+  const panel = document.getElementById("padReadOverlay");
+  return Boolean(panel && !panel.hidden);
+}
+
+/* Everything the pad shows, as plain sentences. */
+function gsPadReadContent(overlay) {
+  const parts = [];
+  const status = overlay.querySelector(".gesture-status");
+  if (status && !status.hidden && status.textContent.trim()) parts.push(status.textContent.replace(/\s+/g, " ").trim());
+  overlay.querySelectorAll(".gesture-surface:not([hidden]) p:not(.pad-hold-hint)").forEach((p) => {
+    const text = p.textContent.replace(/\s+/g, " ").trim();
+    if (text) parts.push(text);
+  });
+  return { title: overlay.querySelector(".gesture-title")?.textContent.trim() || "", parts };
+}
+
+function gsPadReadOpen(overlay) {
+  const panel = document.getElementById("padReadOverlay");
+  const body = document.getElementById("padReadBody");
+  const title = document.getElementById("padReadTitle");
+  if (!panel || !body || !title || !panel.hidden || !overlay) return false;
+  const content = gsPadReadContent(overlay);
+  title.textContent = content.title || "On this screen";
+  body.querySelectorAll("p").forEach((p) => p.remove());
+  content.parts.forEach((text) => {
+    const p = document.createElement("p");
+    p.textContent = text;
+    body.appendChild(p);
+  });
+  panel.gsFrom = overlay;
+  panel.hidden = false;
+  body.scrollTop = 0;
+  title.focus({ preventScroll: true });
+  return true;
+}
+
+/* Close "Read it larger" and go back to the pad. False when it was not open. */
+function gsPadReadClose() {
+  const panel = document.getElementById("padReadOverlay");
+  if (!panel || panel.hidden) return false;
+  panel.hidden = true;
+  const from = panel.gsFrom;
+  panel.gsFrom = null;
+  if (from && !from.hidden) from.querySelector(".gesture-title")?.focus({ preventScroll: true });
+  return true;
+}
 
 /**
  * Read swipes and taps on a surface. handlers: { up, down, left, right, tap }.
@@ -718,20 +827,44 @@ function gsBindSwipeSurface(surface, getHandlers) {
   // screen-reader double tap on them can never count as an answer.
   const isControl = (target) => Boolean(target?.closest?.("button, select, a, input, label, summary, .gesture-title, .gesture-header"));
   surface.addEventListener("pointerdown", (event) => {
-    if (isControl(event.target)) return;
+    if (isControl(event.target) || gsPadReadIsOpen()) return;
     swipe.active = true;
     swipe.x = event.clientX;
     swipe.y = event.clientY;
     swipe.id = event.pointerId;
+    swipe.moved = false;
+    swipe.held = false;
     // The moment that counts is the touch, not the lift: a 0.3 s swipe must
     // not make the warning time 0.3 s shorter (Cindi, 16 Oct 2026).
     swipe.downAt = performance.now();
     try { surface.setPointerCapture(event.pointerId); } catch (error) { /* optional */ }
+    // Build 25 (22.6): a press and hold that does not move opens "Read it
+    // larger" on a swipe pad, and is not an answer.
+    clearTimeout(swipe.holdTimer);
+    const overlay = surface.closest?.(".gesture-overlay") || surface;
+    if (gsPadHoldEnabled() && overlay.classList.contains("swipes") && overlay.querySelector(".gesture-surface:not([hidden])")) {
+      const pointerType = event.pointerType || "pointer";
+      swipe.holdTimer = setTimeout(() => {
+        if (!swipe.active || swipe.moved) return;
+        swipe.held = true;
+        gsGestureLogAdd(pointerType, "hold", GS_HOLD_MS);
+        gsPadReadOpen(overlay);
+      }, GS_HOLD_MS);
+    }
+  });
+  surface.addEventListener("pointermove", (event) => {
+    if (!swipe.active || event.pointerId !== swipe.id || swipe.moved) return;
+    if (Math.abs(event.clientX - swipe.x) >= GS_SWIPE_MIN_PX || Math.abs(event.clientY - swipe.y) >= GS_SWIPE_MIN_PX) {
+      swipe.moved = true;
+      clearTimeout(swipe.holdTimer);
+    }
   });
   surface.addEventListener("pointerup", (event) => {
     if (!swipe.active || event.pointerId !== swipe.id) return;
     swipe.active = false;
+    clearTimeout(swipe.holdTimer);
     swipe.lastUpAt = performance.now();
+    if (swipe.held) { swipe.held = false; return; }   // a press and hold: never an answer
     const dx = event.clientX - swipe.x;
     const dy = event.clientY - swipe.y;
     const handlers = getHandlers() || {};
@@ -745,12 +878,12 @@ function gsBindSwipeSurface(surface, getHandlers) {
       handlers[kind](swipe.downAt);
     }
   });
-  surface.addEventListener("pointercancel", () => { swipe.active = false; });
+  surface.addEventListener("pointercancel", () => { swipe.active = false; clearTimeout(swipe.holdTimer); });
   // A screen reader's double-tap arrives as a click with no pointer sequence
   // of its own (TalkBack; VoiceOver with Direct Touch off): it counts as a
   // tap. A click that follows a pointer sequence is that same tap, ignored.
   surface.addEventListener("click", (event) => {
-    if (isControl(event.target)) return;
+    if (isControl(event.target) || gsPadReadIsOpen()) return;
     if (swipe.lastUpAt > 0 && performance.now() - swipe.lastUpAt < 700) return;
     gsGestureLogAdd("click", "tap", 0);
     const handlers = getHandlers() || {};
@@ -797,6 +930,7 @@ function gsOpenAnswerPad({ title, onAnswer, onBack = null, onSkip = null }) {
   overlay.classList.toggle("swipes", swipeOn);
   gsSurfaceAccessibility(surface, `${title} ${GS_PAD_LABELS.answer}`);
   gsShowPad(overlay);
+  gsPadFitAll();   // already open with a new question: fit again
   // One swipe either way from the middle answer reaches the other two.
   gsFocusPadStart(overlay, surface, document.querySelector("#answerOverlay .answer-btn[data-answer='same']"));
 }
@@ -1161,9 +1295,13 @@ function gsCompareReplay(afterSec = 0.1) {
   gsCompareState.phase = "replaying";
   gsBeginQuiet();
   const params = { sampleSec: gsCompareState.intervalSec, crossingSec: gsCompareState.crossingSec, style: gsCompareStyle() };
-  const doneAt = gsReplayJudgment({ ...params, startDelaySec: afterSec + 0.4 });
-  gsPlayAgainSet("compare", () => gsReplayJudgment({ ...params, startDelaySec: 0.5 }));
-  gsLater(gsCompareTimers, () => gsCompareFinish("Press Play for another.", "neutral", { describe: gsCompareState.lastDescribe }), doneAt + 0.2);
+  gsPlayAgainSet("compare", (intro = true) => gsReplayJudgment({ ...params, startDelaySec: 0.5, intro }));
+  // Build 25 (22.8): with a screen reader, "Replay" first, the sounds after it.
+  gsReplayAfterWord(
+    (intro) => gsReplayJudgment({ ...params, startDelaySec: afterSec + 0.4, intro }),
+    (doneAt) => gsLater(gsCompareTimers, () => gsCompareFinish("Press Play for another.", "neutral", { describe: gsCompareState.lastDescribe }), doneAt + 0.2),
+    { stillWanted: () => gsCompareState.phase === "replaying" }
+  );
 }
 
 /* Play it again: the same replay, not recorded, then back to idle. */
@@ -1175,8 +1313,11 @@ function gsComparePlayAgain() {
   gsSetBusy(gsPlayAgainButton("compare"), true);
   gsCompareStatus("", "neutral", { announce: false });
   gsBeginQuiet();
-  const doneAt = fn();
-  gsLater(gsCompareTimers, () => gsCompareFinish("Press Play for another.", "neutral", { focus: "playAgain", describe: gsCompareState.lastDescribe }), doneAt + 0.2);
+  gsReplayAfterWord(
+    (intro) => fn(intro),
+    (doneAt) => gsLater(gsCompareTimers, () => gsCompareFinish("Press Play for another.", "neutral", { focus: "playAgain", describe: gsCompareState.lastDescribe }), doneAt + 0.2),
+    { stillWanted: () => gsCompareState.phase === "replaying" }
+  );
 }
 
 function gsCompareFinish(message, tone = "neutral", { focus = "play", describe = "" } = {}) {
@@ -1286,13 +1427,16 @@ function gsCompareHowMuchDone(produced) {
     gsBeginQuiet();
     const judgment = { sampleSec: gsCompareState.intervalSec, crossingSec: gsCompareState.crossingSec, style: gsCompareStyle() };
     const estimate = { estimateSec: produced, trueDiffSec: trueDiff, marginSec: margin, append: true };
-    const replayB = (startDelaySec) => {
-      const first = gsReplayJudgment({ ...judgment, startDelaySec });
+    const replayB = (startDelaySec, intro = true) => {
+      const first = gsReplayJudgment({ ...judgment, startDelaySec, intro });
       return gsReplayMagnitudeB({ ...estimate, startDelaySec: first + 0.5 });
     };
-    const secondDone = replayB(0.8);
-    gsPlayAgainSet("compare", () => replayB(0.5));
-    gsLater(gsCompareTimers, () => gsCompareFinish(closing, tone, { describe: gsCompareState.lastDescribe }), secondDone + 0.2);
+    gsPlayAgainSet("compare", (intro = true) => replayB(0.5, intro));
+    gsReplayAfterWord(
+      (intro) => replayB(0.8, intro),
+      (secondDone) => gsLater(gsCompareTimers, () => gsCompareFinish(closing, tone, { describe: gsCompareState.lastDescribe }), secondDone + 0.2),
+      { stillWanted: () => gsCompareState.phase === "replaying" }
+    );
     return;
   }
   gsCompareState.lastDescribe = `That was the sample, your crossing time, where you thought the sample ended, and the sound where it really ended: ${gsVerdictWords(correct)}.`;
@@ -1306,9 +1450,12 @@ function gsCompareHowMuchDone(produced) {
     marginSec: margin,
     style: gsCompareStyle()
   };
-  const doneAt = gsReplayMagnitudeA({ ...params, startDelaySec: 0.8 });
-  gsPlayAgainSet("compare", () => gsReplayMagnitudeA({ ...params, startDelaySec: 0.5 }));
-  gsLater(gsCompareTimers, () => gsCompareFinish(closing, tone, { describe: gsCompareState.lastDescribe }), doneAt + 0.2);
+  gsPlayAgainSet("compare", (intro = true) => gsReplayMagnitudeA({ ...params, startDelaySec: 0.5, intro }));
+  gsReplayAfterWord(
+    (intro) => gsReplayMagnitudeA({ ...params, startDelaySec: 0.8, intro }),
+    (doneAt) => gsLater(gsCompareTimers, () => gsCompareFinish(closing, tone, { describe: gsCompareState.lastDescribe }), doneAt + 0.2),
+    { stillWanted: () => gsCompareState.phase === "replaying" }
+  );
 }
 
 function gsCompareRenderScore() {
@@ -1429,6 +1576,8 @@ function gsLiveRenderPad() {
   // reads it again.
   if (gsLiveState.renderedPhase !== phase && gsOpenPads > 0) gsDirectTouchSync({ focus: true });
   gsLiveState.renderedPhase = phase;
+  gsPadHoldSync();
+  gsPadFitAll();
 }
 
 /* Where focus belongs on the street pad between steps: the swipe area (the
@@ -1787,19 +1936,23 @@ function gsLiveAfterVehicle({ judged, correct, magnitude = null }) {
     const warningSec = gsLiveState.warningSec;
     const crossingSec = gsLiveState.crossingSec;
     const category = gsLiveState.category;
-    const run = (startDelaySec) => {
+    const run = (startDelaySec, intro = true) => {
       if (replayB) {
-        const first = gsReplayJudgment({ sampleSec: warningSec, crossingSec, style, startDelaySec });
+        const first = gsReplayJudgment({ sampleSec: warningSec, crossingSec, style, startDelaySec, intro });
         return gsReplayMagnitudeB({ estimateSec: magnitude.produced, trueDiffSec: magnitude.trueDiff, marginSec: magnitude.marginSec, startDelaySec: first + 0.5, append: true });
       }
       if (magnitude) {
-        return gsReplayMagnitudeA({ crossingSec, sampleSec: warningSec, estimateSec: magnitude.produced, direction: category, marginSec: magnitude.marginSec, style, startDelaySec });
+        return gsReplayMagnitudeA({ crossingSec, sampleSec: warningSec, estimateSec: magnitude.produced, direction: category, marginSec: magnitude.marginSec, style, startDelaySec, intro });
       }
-      return gsReplayJudgment({ sampleSec: warningSec, crossingSec, style, startDelaySec });
+      return gsReplayJudgment({ sampleSec: warningSec, crossingSec, style, startDelaySec, intro });
     };
-    const doneAt = run(0.3);
-    gsPlayAgainSet("live", () => run(0.5));
-    gsLater(gsLiveTimers, () => gsLiveReady({ describe: gsLiveState.lastDescribe }), doneAt + 0.2);
+    gsPlayAgainSet("live", (intro = true) => run(0.5, intro));
+    // Build 25 (22.8): with a screen reader, "Replay" first, the sounds after it.
+    gsReplayAfterWord(
+      (intro) => run(0.3, intro),
+      (doneAt) => gsLater(gsLiveTimers, () => gsLiveReady({ describe: gsLiveState.lastDescribe }), doneAt + 0.2),
+      { stillWanted: () => gsLiveState.phase === "feedback" }
+    );
   };
 
   if (magnitude) {
@@ -1821,8 +1974,11 @@ function gsLivePlayAgain() {
   gsLiveState.phase = "feedback";
   gsSetBusy(gsPlayAgainButton("live"), true);
   gsBeginQuiet();
-  const doneAt = fn();
-  gsLater(gsLiveTimers, () => gsLiveReady({ describe: gsLiveState.lastDescribe }), doneAt + 0.2);
+  gsReplayAfterWord(
+    (intro) => fn(intro),
+    (doneAt) => gsLater(gsLiveTimers, () => gsLiveReady({ describe: gsLiveState.lastDescribe }), doneAt + 0.2),
+    { stillWanted: () => gsLiveState.phase === "feedback" }
+  );
 }
 
 function gsLiveReady({ describe = "" } = {}) {
@@ -1952,6 +2108,8 @@ function gsComparisonInit() {
   document.querySelectorAll("#answerOverlay .answer-btn").forEach((btn) => {
     btn.addEventListener("click", () => gsAnswerPadAnswer(btn.dataset.answer));
   });
+  // Read it larger (build 25, 22.6): Close goes back to the pad.
+  document.getElementById("padReadClose")?.addEventListener("click", gsPadReadClose);
   // Back, top-left on every pad (tracker 13.7).
   document.getElementById("answerBackBtn")?.addEventListener("click", gsAnswerPadBack);
   document.getElementById("howMuchBackBtn")?.addEventListener("click", gsHowMuchPadBack);

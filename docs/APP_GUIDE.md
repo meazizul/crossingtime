@@ -494,9 +494,14 @@ than in a browser, and the note under the button always states which is active.
   low-vision conditions).
 - **Text size** — up to **300%**, at which point the layout reflows to single
   columns so nothing is clipped. On the answer screens the question and the
-  instructions are shown at your size, limited only by the height of the
-  screen so the pad never scrolls; with buttons only, the buttons fit one
-  screen.
+  instructions are shown as large as the pad can hold on one screen, never
+  larger than your size, so the pad never scrolls and nothing is cut off
+  (build 25). At the larger sizes, without a screen reader, a line at the foot
+  of the swipe area says **Press and hold to read it larger**: a press and
+  hold there, without moving, opens everything on the pad at your own size,
+  scrolling if it has to, with **Close** (or Back, or Escape) to return. A
+  press and hold is never an answer. With buttons only, the pad scrolls up
+  and down and its buttons follow your size.
 - **High contrast** — all gradients flattened. With the Light theme it is black
   on white; with Dark or Inverted it stays white (or yellow) on black.
 - **Pinch zoom** works in the web app and, since build 13, in the iPhone and
@@ -511,7 +516,11 @@ sound is being timed. On iPhone and Android the app speaks through the
 system's own voice (the Android app only since build 15; before that the
 Android web view had no speech engine and said nothing). When VoiceOver or
 TalkBack is running, the app does not speak for itself, so the two never talk
-over each other (build 23); the screen reader says everything instead.
+over each other (build 23); the screen reader says everything instead. The
+timing sounds wait until the screen reader has finished (build 25): on iPhone
+the app waits until VoiceOver reports the words are over, and on Android until
+TalkBack's voice has gone quiet. A phone that does not report TalkBack's voice
+waits as long as slow speech would take.
 
 **How much the app says (verbosity)**, build 20, like a screen reader's:
 
