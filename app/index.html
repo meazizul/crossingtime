@@ -742,6 +742,7 @@
       <p class="pad-instructions"><span class="gesture-arrow" aria-hidden="true">&#9650;</span> Up: longer</p>
       <p class="pad-instructions">Tap: about the same</p>
       <p class="pad-instructions"><span class="gesture-arrow" aria-hidden="true">&#9660;</span> Down: shorter</p>
+      <p class="pad-hold-hint" aria-hidden="true">Press and hold to read it larger</p>
     </div>
     <div class="answer-grid" role="group" aria-label="Your answer" hidden>
       <button class="answer-btn" data-answer="longer" type="button">
@@ -782,6 +783,7 @@
     <button class="settings-action primary play-again-btn" id="livePlayAgainBtn" type="button" hidden>Play it again</button>
     <div class="gesture-surface" id="liveSurface" role="group" tabindex="-1" aria-label="Street. Swipe left or right the moment you detect a vehicle, toward the side it is coming from.">
       <p class="pad-question" id="liveSurfaceText">Swipe left: from the left. Swipe right: from the right.</p>
+      <p class="pad-hold-hint" aria-hidden="true">Press and hold to read it larger</p>
     </div>
     <div class="answer-grid live-buttons" id="liveDetectButtons" role="group" aria-label="Vehicle detected">
       <button class="answer-btn" type="button" data-live-detect="left"><span class="answer-glyph" aria-hidden="true">&#9664;</span><span>Vehicle from the left</span></button>
@@ -791,6 +793,18 @@
       <button class="answer-btn" type="button" id="liveArrivedBtn"><span class="answer-glyph" aria-hidden="true">&#9679;</span><span>It passed in front of me</span></button>
       <button class="answer-btn" type="button" id="liveNeverBtn"><span class="answer-glyph" aria-hidden="true">&#10005;</span><span>It never came</span></button>
     </div>
+  </div>
+
+  <!-- ============ READ IT LARGER (build 25, tracker 22.6) ============
+       A pad fills one screen and cannot scroll, so at the largest text sizes
+       its words are smaller than the student's size. Press and hold on the
+       swipe area (no answer is given) and this shows everything on the pad at
+       the student's own size, scrolling if it has to. -->
+  <div class="pad-read" id="padReadOverlay" role="dialog" aria-modal="true" aria-labelledby="padReadTitle" hidden>
+    <div class="pad-read-body" id="padReadBody">
+      <h2 class="pad-read-title" id="padReadTitle" tabindex="-1">Your answer</h2>
+    </div>
+    <button class="settings-action primary pad-read-close" id="padReadClose" type="button">Close</button>
   </div>
 
   <!-- Screen-reader announcer: outside <main> so it keeps speaking while

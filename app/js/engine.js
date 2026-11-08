@@ -143,6 +143,7 @@
     let stage = 0;
     let started = false;
     let replayTimeout;
+    let practiceReplayToken = 0;   // build 25: a new try or Back cancels a replay still waiting for "Replay"
     let exemplarTimeout;
     let exemplarVisualTimeouts = [];
     let replayUsesConfirmTone = false;
@@ -2422,7 +2423,47 @@
         } catch (error) { /* fall through to the live region */ }
       }
       announceScreenReader(text, { force: true, speak: false });
-      setTimeout(done, gsScreenReaderWaitSec(text) * 1000);
+      const estimateMs = gsScreenReaderWaitSec(text) * 1000;
+      // Build 25 (tracker 22.8): Android does not say when TalkBack has
+      // finished, but it does say when its voice is playing. The shell waits
+      // for TalkBack's voice to start and then to go quiet; if it never
+      // hears it (an older phone, TalkBack's voice off), the estimate stays.
+      const android = nativePlatform === "android" ? CapacitorGlobal?.Plugins?.GSAndroid : null;
+      if (android && typeof android.waitForSpeech === "function") {
+        const sentAt = performance.now();
+        const rest = () => setTimeout(done, Math.max(0, estimateMs - (performance.now() - sentAt)));
+        try {
+          // Not heard by the time the estimate is over: the phone does not
+          // report it, so never wait longer than build 24 did.
+          Promise.resolve(android.waitForSpeech({ startWithinMs: Math.min(2500, estimateMs), quietMs: 450, maxMs: Math.max(8000, estimateMs * 3) }))
+            .then((result) => { if (result && result.heard) done(); else rest(); }, rest);
+          setTimeout(done, Math.max(16000, estimateMs * 3));   // never stuck
+          return;
+        } catch (error) { /* older shell: the estimate */ }
+      }
+      setTimeout(done, estimateMs);
+    }
+
+    /* Build 25 (tracker 22.8): "Replay" through the screen reader first, and
+     * the replay's sounds only once it is over (on iPhone, when VoiceOver
+     * reports it; on Android, when TalkBack's voice goes quiet). run(intro)
+     * starts the replay, with its own "Replay" when intro is true, and
+     * returns when it ends (seconds from now); then(doneAt) gets that time.
+     * stillWanted() is asked again after the word: Back while "Replay" is
+     * being read means no replay. Without a screen reader, or with "Say
+     * Replay" off, the replay starts at once, as before. */
+    function gsReplayWordFirst() {
+      return Boolean(a11ySettings.sayReplay) && gsScreenReaderOn();
+    }
+    function gsReplayAfterWord(run, then, { stillWanted = () => true } = {}) {
+      const start = (intro) => {
+        const doneAt = run(intro);
+        if (typeof then === "function") then(doneAt);
+        return doneAt;
+      };
+      if (!gsReplayWordFirst()) return start(true);
+      gsScreenReaderSay("Replay.", { onDone: () => { if (stillWanted()) start(false); } });
+      return null;
     }
 
     function gsCanSpeakAloud() {
@@ -2670,6 +2711,7 @@
 
     function resetState(message = "Ready.") {
       gsKeepAwakeFor("practice", false);
+      practiceReplayToken += 1;
       clearTimeout(exemplarTimeout);
       clearExemplarVisuals();
       suppressSrAnnouncements = false;
@@ -2754,17 +2796,65 @@
     function beginReplay() {
       const reference = getReferenceTimes();
       const labels = modes[currentMode].labels;
-      const maxTime = Math.max(...markerTimes, ...reference);
       clearExemplarVisuals();
-      emitCue("replay_start", { referenceTimes: reference, markerTimes });
+      // Build 25 (tracker 22.8): with a screen reader the word "Replay" goes
+      // through it first, and the replay is scheduled once it is over.
+      const wordFirst = gsReplayWordFirst();
+      emitCue("replay_start", { referenceTimes: reference, markerTimes, skipAnnounce: wordFirst });
       gsBeginQuiet();
+      if (wordFirst) {
+        const token = ++practiceReplayToken;
+        const taps = markerTimes.slice();
+        gsScreenReaderSay("Replay.", { onDone: () => {
+          if (token === practiceReplayToken) scheduleReplay(0.5, reference, labels, taps);
+          else logPracticeMarks(classifyPracticeMarks(reference, labels, taps));   // left during the word: still recorded
+        } });
+        return;
+      }
       // "Replay" is said first and the tones wait for the word (build 15).
       // The word takes the place of most of the old lead-in: half a second of
       // silence after it, instead of a second and a half on top (build 18;
       // Azizul found the wait before the replay long).
       const intro = gsReplayIntro({ announced: true });
-      const baseDelay = intro > 0 ? intro + 0.5 : TEST_TUNING.replayLeadInSec;
+      scheduleReplay(intro > 0 ? intro + 0.5 : TEST_TUNING.replayLeadInSec, reference, labels, markerTimes);
+    }
 
+    /* The Practice attempt, mark by mark: the reference, the student's time
+     * and whether it was within the margin. */
+    function classifyPracticeMarks(reference, labels, taps) {
+      return reference.slice(1).map((time, index) => {
+        const label = labels[index + 1] || "Reference";
+        const street = streetForLabel(label);
+        return {
+          time,
+          index,
+          label,
+          street,
+          userTime: taps[index + 1] ?? 0,
+          ...classifyMark(taps[index + 1], time, street)
+        };
+      });
+    }
+
+    // Record every mark. Until build 13 Practice never wrote to the log, so
+    // the Progress page stayed empty and the adaptive margin could not see it.
+    function logPracticeMarks(marks) {
+      if (typeof gsLogAttempt !== "function") return;
+      marks.forEach(({ street, userTime, time, feedbackType, marginSec }) => {
+        gsLogAttempt({
+          activity: "practice",
+          street,
+          userSec: userTime,
+          refSec: time,
+          diffSec: userTime - time,
+          correct: feedbackType === "acceptable",
+          marginSec
+        });
+      });
+    }
+
+    function scheduleReplay(baseDelay, reference, labels, markerTimes) {
+      const maxTime = Math.max(...markerTimes, ...reference);
       if (labels[0]) {
         exemplarVisualTimeouts.push(
           setTimeout(() => { setActionButtonStageByLabel(labels[0]); }, baseDelay * 1000)
@@ -2791,18 +2881,7 @@
 
       // One classification pass drives audio, visuals, cues, haptics and the
       // attempt log.
-      const marks = reference.slice(1).map((time, index) => {
-        const label = labels[index + 1] || "Reference";
-        const street = streetForLabel(label);
-        return {
-          time,
-          index,
-          label,
-          street,
-          userTime: markerTimes[index + 1] ?? 0,
-          ...classifyMark(markerTimes[index + 1], time, street)
-        };
-      });
+      const marks = classifyPracticeMarks(reference, labels, markerTimes);
 
       marks.forEach(({ time, index, label, diff, feedbackType }) => {
         playFeedbackTone(feedbackType, baseDelay + time);
@@ -2829,21 +2908,7 @@
       // Saved only after every replay sound and visual is scheduled: saving
       // rewrites the whole history, and anything scheduled after it came late
       // by that long, more so with a long history (tracker 20.10).
-      // Record every mark. Until now Practice never wrote to the log, so the
-      // Progress page stayed empty and the adaptive margin could not see it.
-      if (typeof gsLogAttempt === "function") {
-        marks.forEach(({ street, userTime, time, feedbackType, marginSec }) => {
-          gsLogAttempt({
-            activity: "practice",
-            street,
-            userSec: userTime,
-            refSec: time,
-            diffSec: userTime - time,
-            correct: feedbackType === "acceptable",
-            marginSec
-          });
-        });
-      }
+      logPracticeMarks(marks);
 
       clearTimeout(replayTimeout);
       // What the replay was, in words, once it is over (build 15): your taps,

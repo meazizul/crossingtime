@@ -2209,3 +2209,60 @@ h2.safety-note-title { font-size: 1rem; margin: 0; }
 /* Play it again (F1): the same size and style as the page's other main controls, right after the main button. */
 .play-again-btn { width: 100%; min-height: 3.6rem; font-size: 1.05rem; margin-top: 10px; }
 .gesture-overlay .play-again-btn { flex: 0 0 auto; margin-top: 0; }
+
+/* ---------------- Build 25 (tracker 22.6): every label at the student's size ----------------
+ * A swipe pad fills one screen and cannot scroll (a drag is an answer), so at
+ * the largest text sizes its words stay smaller than the student's size.
+ * With large text (and no screen reader, which reads every label anyway) a
+ * line at the foot of the swipe area says so, and a press and hold there
+ * opens "Read it larger": everything on the pad at the student's own size,
+ * scrolling normally. A press and hold is never an answer. */
+.pad-hold-hint { display: none; }
+body.pad-hold .gesture-overlay.swipes .pad-hold-hint {
+  display: block;
+  margin: 0;
+  font-size: 0.6em;
+  font-weight: 600;
+  line-height: 1.2;
+}
+.pad-read {
+  position: fixed;
+  inset: 0;
+  z-index: 9500;                       /* above the pads (9000-9100), below the visual replay (9999) */
+  height: var(--viewport-height, 100vh);
+  background: var(--bg);
+  color: var(--text);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: max(16px, env(safe-area-inset-top)) 16px max(16px, env(safe-area-inset-bottom));
+  touch-action: pan-y;
+  overscroll-behavior: contain;
+}
+.pad-read[hidden] { display: none; }
+.pad-read-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  font-size: 1rem;                     /* the student's own text size, no cap */
+  line-height: 1.3;
+  overflow-wrap: anywhere;
+  -webkit-hyphens: auto;
+  hyphens: auto;
+}
+.pad-read-title { font-size: 1.15rem; line-height: 1.2; margin: 0 0 0.5em; }
+.pad-read-title:focus { outline: none; }
+.pad-read-body p { margin: 0 0 0.6em; font-weight: 700; }
+.pad-read-close { flex: 0 0 auto; width: 100%; min-height: 48px; height: auto; padding: 0.15em 16px; font-size: 1rem; line-height: 1.2; }   /* "Close" at the student's size, no taller than it needs */
+
+/* The street pad with buttons only, like the answer pad in build 24: no swipes
+   to protect, so it scrolls and its text follows the student's size. */
+#liveOverlay.buttons-only { overflow-y: auto; touch-action: pan-y; }
+#liveOverlay.buttons-only .gesture-title { font-size: 1.15rem; line-height: 1.2; }
+#liveOverlay.buttons-only .gesture-status { font-size: 1rem; line-height: 1.25; }
+#liveOverlay.buttons-only .settings-action { font-size: 1rem; }
+#liveOverlay.buttons-only .answer-grid { flex: 0 0 auto; }
+#liveOverlay.buttons-only .answer-btn { font-size: 1.02rem; min-height: 5rem; height: auto; }
+#liveOverlay.buttons-only .answer-glyph { font-size: 1.7rem; }
+/* "How much": one big button, so its words can be the student's size too. */
+.gesture-overlay .howmuch-btn { font-size: 1.4rem; line-height: 1.1; overflow-wrap: anywhere; }

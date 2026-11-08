@@ -277,15 +277,19 @@ function gsSignalResolve(producedSec) {
   // The replay in words, once it is over (build 15). Never the seconds.
   gsSignalState.lastDescribe = `That was the sample, your stop, and your crossing time: ${gsVerdictWords(within)}.`;
   gsSignalState.lastVerdict = within ? "Within the margin." : "Outside the margin.";
-  const doneAt = gsReplayProduction({ ...params, startDelaySec: 1.0 });
-  gsPlayAgainSet("signal", () => gsReplayProduction({ ...params, startDelaySec: 0.5 }));
-  gsLater(gsSignalTimers, () => {
-    suppressSrAnnouncements = false;
-    gsSignalState.phase = "idle";
-    gsSignalUpdateButton();
-    gsSignalFinishStatus();
-    gsPlayAgainShow("signal", true);
-  }, doneAt + 0.2);
+  gsPlayAgainSet("signal", (intro = true) => gsReplayProduction({ ...params, startDelaySec: 0.5, intro }));
+  // Build 25 (22.8): with a screen reader, "Replay" first, the sounds after it.
+  gsReplayAfterWord(
+    (intro) => gsReplayProduction({ ...params, startDelaySec: intro ? 1.0 : 0.5, intro }),
+    (doneAt) => gsLater(gsSignalTimers, () => {
+      suppressSrAnnouncements = false;
+      gsSignalState.phase = "idle";
+      gsSignalUpdateButton();
+      gsSignalFinishStatus();
+      gsPlayAgainShow("signal", true);
+    }, doneAt + 0.2),
+    { stillWanted: () => gsSignalState.phase === "replaying" }
+  );
 }
 
 /* "Ready for another.", after the replay in words when those are on. */
@@ -306,15 +310,14 @@ function gsSignalPlayAgain() {
   gsSetBusy(gsPlayAgainButton("signal"), true);
   gsSignalStatus("", "neutral", { announce: false });
   gsBeginQuiet();
-  const doneAt = fn();
-  gsLater(gsSignalTimers, () => {
+  gsReplayAfterWord((intro) => fn(intro), (doneAt) => gsLater(gsSignalTimers, () => {
     suppressSrAnnouncements = false;
     gsSignalState.phase = "idle";
     gsSignalUpdateButton();
     gsSignalFinishStatus();
     gsPlayAgainShow("signal", true);
     gsPlayAgainButton("signal")?.focus({ preventScroll: true });
-  }, doneAt + 0.2);
+  }, doneAt + 0.2), { stillWanted: () => gsSignalState.phase === "replaying" });
 }
 
 /* The phone locked or another app came to the front while a sound was being
