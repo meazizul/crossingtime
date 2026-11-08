@@ -12,6 +12,9 @@ test("practice logs a within-margin attempt, shows a score line, and unlocks set
   await page.evaluate(() => gsShowScreen("practice"));
   await expect(page.locator("#practiceScore")).toHaveText("No attempts yet");   // the margin in seconds only with Show times on (F2, build 15)
 
+  // Stop the fake clock flowing in real time: starting the audio on the first
+  // press can take ~0.1 s on a busy Mac, which would otherwise be counted.
+  await page.clock.pauseAt(await page.evaluate(() => Date.now() + 1000));
   await page.click("#actionBtn");                       // Begin
   await expect(page.locator("#settingsTrigger")).toBeDisabled();
   await tick(page, 4000);                                // exactly the half-street time
