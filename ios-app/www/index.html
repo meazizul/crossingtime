@@ -95,7 +95,6 @@
     <section id="screen-home" class="screen" aria-labelledby="screenTitle">
       <p class="field-help home-student" id="homeStudent" role="status" hidden></p>
       <p class="om-guidance" id="homeGuidance">For use under the guidance of an Orientation and Mobility Specialist. It does not replace O&amp;M instruction.</p>
-      <p class="setup-required-prompt" id="volumeTip" role="status" hidden>Your phone volume is low. Press the volume up button on the side of the phone.</p>
 
       <section class="setup-required-prompt session-code-card" id="sessionCodeCard" aria-labelledby="sessionCodeTitle" hidden>
         <p class="setup-required-prompt-title" id="sessionCodeTitle">Session code</p>
@@ -506,7 +505,20 @@
           <input id="fullTime" type="number" step="0.1" min="0.1" max="600" inputmode="decimal" />
           <label for="marginInput">Margin of error (seconds)</label>
           <input id="marginInput" type="number" step="0.1" min="0.01" max="60" inputmode="decimal" value="0.4" />
-          <p class="setup-note">Chosen and set by the instructor. 0.50 seconds has historically been taught; there is no research yet on the right value.</p>
+          <p class="setup-note">Chosen and set by the instructor. 0.50 seconds has historically been taught; there is no research yet on the right value. The margin is used in Practice my timing, Comparison preparation and "how much".</p>
+          <label for="ftSameRange">"About the same" in Comparison practice and At the street: within</label>
+          <select id="ftSameRange" data-feature="sameRange">
+            <option value="8">8% of the crossing time</option>
+            <option value="10">10% of the crossing time</option>
+            <option value="11">11% of the crossing time</option>
+            <option value="12">12% of the crossing time</option>
+            <option value="13">13% of the crossing time</option>
+            <option value="14">14% of the crossing time</option>
+            <option value="15">15% of the crossing time</option>
+            <option value="20">20% of the crossing time</option>
+            <option value="25">25% of the crossing time</option>
+          </select>
+          <p class="setup-note">A sample or warning time this close to the crossing time counts as "about the same". "About the same" is then correct, and so is "longer" or "shorter" in the right direction. The range grows with the crossing time: at 12%, a 3-second crossing gives 2.64 to 3.36 seconds and a 7-second crossing 6.16 to 7.84 seconds.</p>
         </div>
 
         <div class="setup-group">

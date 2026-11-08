@@ -23,6 +23,18 @@
 
 const GS_FEATURES_KEY = "om-features";
 
+/*
+ * "About the same" in Comparison practice and At the street (tracker 20.16).
+ * Design (Cindi, Nov 7 2026): the range is proportional to the crossing time,
+ * Weber's law, so short crossings get narrow ranges and long ones wide ranges:
+ * a sample is "about the same" when it is within k x the crossing time. The
+ * group (Cindi, Dona, Jolene and the Stevens team) is still choosing k; Cindi
+ * suggested 0.10 to 0.12. Until then the instructor picks it here, 12 per cent
+ * by default. The list is also the link format (engine.js): add values only at
+ * the end, never reorder.
+ */
+const GS_SAME_RANGE_PERCENTS = ["12", "8", "10", "11", "13", "14", "15", "20", "25"];
+
 const GS_FEATURE_DEFAULTS = Object.freeze({
   activities: { practice: true, signal: true, compare: true, live: true },
   practiceModes: { "2b": true, "2": true, "3": true },
@@ -39,7 +51,8 @@ const GS_FEATURE_DEFAULTS = Object.freeze({
     liveReplay: "always",         // always | errors | never | choose
     liveConfirm: "sound",         // sound | vibration  (confirmation of a street gesture)
     playAgain: "choose",          // on | off | choose  ("Play it again" after a replay, F1)
-    trafficSide: "right"          // right | left: the side of the road vehicles drive on (20.13)
+    trafficSide: "right",         // right | left: the side of the road vehicles drive on (20.13)
+    sameRange: "12"               // "about the same" range, percent of the crossing time (20.16)
   }
 });
 
@@ -57,7 +70,8 @@ const GS_FEATURE_VALUES = {
   liveReplay: ["always", "errors", "never", "choose"],
   liveConfirm: ["sound", "vibration"],
   playAgain: ["on", "off", "choose"],
-  trafficSide: ["right", "left"]
+  trafficSide: ["right", "left"],
+  sameRange: GS_SAME_RANGE_PERCENTS
 };
 
 const GS_ACTIVITY_IDS = ["practice", "signal", "compare", "live"];
@@ -107,6 +121,12 @@ function gsSaveFeatures(features) {
 
 function gsFeature(key) {
   return gsLoadFeatures().options[key];
+}
+
+/* k for the "about the same" range, as a fraction (0.12 for 12 per cent). */
+function gsSameRangeK() {
+  const percent = Number(gsFeature("sameRange"));
+  return Number.isFinite(percent) && percent > 0 ? percent / 100 : 0.12;
 }
 
 function gsActivityEnabled(id) {

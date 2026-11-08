@@ -99,7 +99,8 @@ test("20.13: the labels say the right side, and the setting travels in the setup
   expect(labels.compare).toContain("traffic from the right");
   const back = await page.evaluate(() => gsNormalizeFeatures(decodeLinkFeatures(encodeLinkFeatures(gsLoadFeatures()))).options.trafficSide);
   expect(back).toBe("left");
-  // A link made before build 22 has no digit for it: right, as before.
-  const old = await page.evaluate(() => gsNormalizeFeatures(decodeLinkFeatures(encodeLinkFeatures(gsLoadFeatures()).slice(0, -1))).options.trafficSide);
+  // A link made before build 22 has no digit for it: right, as before. (Build
+  // 24 added one more digit after it, the "about the same" range.)
+  const old = await page.evaluate(() => gsNormalizeFeatures(decodeLinkFeatures(encodeLinkFeatures(gsLoadFeatures()).slice(0, -2))).options.trafficSide);
   expect(old).toBe("right");
 });

@@ -8,6 +8,56 @@ than commit history. They are accurate to the day.
 
 ---
 
+## 2026-11-07 (build 24) — "about the same", screen readers, dialogs and the volume tip
+
+From Cindi Lashinsky's bug tracker (items 20.16 and 22.1 to 22.8) and the
+"Comparison page" emails with Dona Sauerburger and Jolene Troisi, 7 November
+2026.
+
+- **"About the same" grows with the crossing time (20.16).**
+  - Cindi's design: in Comparison practice and At the street, a sample or
+    warning time counts as "about the same" when it is within k × the
+    crossing time (Weber's law), no longer within the margin of error.
+  - Inside that range, "about the same" is correct, and so is "longer" or
+    "shorter" in the right direction. Example: 7.2 s against a 7-second
+    crossing may be answered "about the same" or "longer". Only the opposite
+    direction is wrong.
+  - The group is still choosing k. Until then it is an Instructor setup option,
+    12% by default (8% to 25%), and it travels in the setup link.
+  - The margin of error is now used only in Practice my timing, Comparison
+    preparation and "how much".
+  - The report and the Excel file show the range and every answer that counted
+    as correct.
+- **No volume tip (22.7).** The app no longer tells the student to turn the
+  volume up, on screen or by voice. "Play a test sound" under Accessibility
+  still reports the volume for anyone who wants to check.
+- **Dialogs scroll up and down only (22.4).** At large text sizes one long
+  word was wider than the Accessibility dialog, so it could be dragged
+  sideways. Long words now wrap in every dialog.
+- **VoiceOver and TalkBack turned on or off are noticed at once (22.2).**
+  The iPhone and Android apps tell the page as soon as the screen reader
+  changes, instead of on the next launch.
+- **The app does not talk over the screen reader (22.1, 22.8).**
+  - Nothing is announced while the app is not the screen in front, and the
+    start-up message is no longer announced on its own at launch.
+  - With VoiceOver or TalkBack on, "Get ready" is said by the screen reader,
+    not the app's voice.
+  - On iPhone the tones that follow a description, "Get ready" or "Listen to
+    the sample warning time" wait until VoiceOver reports it has finished
+    speaking. On Android, and before "Replay", the wait is worked out for slow
+    speech.
+- **Answer buttons at large text (22.6, first part).** With buttons only, the
+  answer pad now scrolls up and down and its text follows the student's text
+  size, uncapped. The swipe pads are unchanged for now.
+- **Tested:**
+  - 285 automated tests (16 new);
+  - the in-app check on the iPhone 14 Pro Max simulator: 168 of 168;
+  - the iPhone and Android apps build.
+
+  Not yet checked on a real phone with VoiceOver or TalkBack.
+
+---
+
 ## 2026-11-05 (build 23) — the session code pop-up with VoiceOver
 
 From Cindi Lashinsky and a new tester using VoiceOver, 4 November 2026.

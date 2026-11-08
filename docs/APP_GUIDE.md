@@ -241,7 +241,8 @@ Open **Instructor setup** from Home, or from **Settings** (gear icon). Under
 | **Vehicles drive on the** | Right side of the road (default) or left side (United Kingdom, Ireland, Australia, Japan, India…). It decides which side is the first half: driving on the right, traffic from the left; driving on the left, traffic from the right. At the street and both comparison activities follow it, and it travels in the setup link (build 22) | The country where the student practises. One-way streets have no setting |
 | **First half of the street, traffic from the left (seconds)** | How long this student takes to clear the first half | Instructor times at least three crossings, uses the longest |
 | **Full street, traffic from the right (seconds)** | How long to cross the whole street | Same |
-| **Margin of error (seconds)** | How close counts as "on time" | Chosen by the instructor. The app starts at 0.4 s; 0.5 s has historically been taught; there is no research yet on the right value. It must be more than 0 and at most 60 s |
+| **Margin of error (seconds)** | How close counts as "on time" in Practice my timing, Comparison preparation and "how much" | Chosen by the instructor. The app starts at 0.4 s; 0.5 s has historically been taught; there is no research yet on the right value. It must be more than 0 and at most 60 s |
+| **"About the same" range** (build 24) | How close a sample or warning time must be to the crossing time to count as "about the same", in Comparison practice and At the street | A share of the crossing time, 12% by default (8% to 25%), so longer crossings get wider ranges. Inside the range "about the same" is correct, and so is "longer" or "shorter" in the right direction. The group is still choosing the value |
 
 Until both street times are entered, the activities stay locked. The app also
 refuses a setup it cannot use and says why: a crossing time over 600 s, a

@@ -84,15 +84,14 @@ test("iPhone app: a steady tone stopped before the player answers still stops", 
   expect(stopped[0]).toBe(sustained[0].id);
 });
 
-test("iPhone app: low phone volume shows a note on Home, which goes when the volume is turned up", async ({ page }) => {
+test("iPhone app: at low phone volume the app says and shows nothing about it (22.7)", async ({ page }) => {
   await page.addInitScript(nativeIos(), 0.25);
   await openApp(page);
-  await expect(page.locator("#volumeTip")).toBeHidden();
   await page.locator("body").click({ position: { x: 5, y: 5 } });
-  await expect(page.locator("#volumeTip")).toBeVisible();
-  await expect(page.locator("#volumeTip")).toContainText("volume up button");
-  await page.evaluate(() => { window.__native.volume = 0.8; window.__native.listeners.volume({ value: 0.8 }); });
-  await expect(page.locator("#volumeTip")).toBeHidden();
+  await page.evaluate(() => { window.__native.volume = 0.1; window.__native.listeners.volume?.({ value: 0.1 }); });
+  await expect(page.locator("#volumeTip")).toHaveCount(0);
+  expect(await page.evaluate(() => document.body.innerText)).not.toContain("volume up button");
+  expect(await page.evaluate(() => document.getElementById("srAnnouncer").textContent)).not.toContain("volume");
 });
 
 test("iPhone app: Play a test sound reports the silent switch and the phone volume", async ({ page }) => {
@@ -102,7 +101,8 @@ test("iPhone app: Play a test sound reports the silent switch and the phone volu
   await page.evaluate(() => document.getElementById("soundTestBtn").click());
   await expect(page.locator("#soundTestNote")).toContainText("plays even with the silent switch on");
   await expect(page.locator("#soundTestNote")).toContainText("Phone volume 30%");
-  await expect(page.locator("#soundTestNote")).toContainText("volume up button");
+  // Build 24 (22.7): it reports the level but never tells the student to raise it.
+  await expect(page.locator("#soundTestNote")).not.toContainText("volume up button");
   expect(await page.evaluate(() => window.__native.tones.length)).toBe(2);
 });
 

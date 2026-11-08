@@ -71,6 +71,7 @@ public class GSNativePlugin: CAPPlugin, CAPBridgedPlugin {
         CAPPluginMethod(name: "directTouchHide", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "canOpen", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "accessibilityStatus", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "announce", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "log", returnType: CAPPluginReturnPromise)
     ]
 
@@ -81,10 +82,14 @@ public class GSNativePlugin: CAPPlugin, CAPBridgedPlugin {
     private var volumeObservation: NSKeyValueObservation?
     private var routeObserver: NSObjectProtocol?
     private var interruptionObserver: NSObjectProtocol?
+    private var voiceOverObserver: NSObjectProtocol?
+    private var announcementObserver: NSObjectProtocol?
+    /// Calls waiting for VoiceOver to finish an announcement, by its text.
+    private var pendingAnnouncements: [String: [CAPPluginCall]] = [:]
 
     override public func load() {
-        // Tell the page when the phone's volume changes, so the "volume is
-        // low" note goes away as soon as the student turns it up.
+        // Tell the page when the phone's volume changes. Build 24 (22.7): the
+        // page no longer shows a volume tip; it re-reads the output delay.
         volumeObservation = AVAudioSession.sharedInstance().observe(\.outputVolume, options: [.new]) { [weak self] _, change in
             guard let value = change.newValue else { return }
             self?.notifyListeners("volume", data: ["value": value])
@@ -113,6 +118,26 @@ public class GSNativePlugin: CAPPlugin, CAPBridgedPlugin {
                   AVAudioSession.InterruptionType(rawValue: raw) == .began else { return }
             self?.notifyListeners("audioInterrupted", data: ["reason": "interruption"])
         }
+        // Build 24 (tracker 22.2): VoiceOver turned on or off while the app
+        // is open. The page changes at once, not on the next launch.
+        voiceOverObserver = NotificationCenter.default.addObserver(
+            forName: UIAccessibility.voiceOverStatusDidChangeNotification, object: nil, queue: .main
+        ) { [weak self] _ in
+            self?.notifyListeners("screenReader", data: ["screenReader": UIAccessibility.isVoiceOverRunning])
+        }
+        // Build 24 (tracker 22.8): VoiceOver says when it has finished an
+        // announcement, so the page can start timing tones after the words,
+        // not on a guess.
+        announcementObserver = NotificationCenter.default.addObserver(
+            forName: UIAccessibility.announcementDidFinishNotification, object: nil, queue: .main
+        ) { [weak self] note in
+            guard let self = self else { return }
+            let text = note.userInfo?[UIAccessibility.announcementStringValueUserInfoKey] as? String ?? ""
+            let finished = note.userInfo?[UIAccessibility.announcementWasSuccessfulUserInfoKey] as? Bool ?? true
+            if let calls = self.pendingAnnouncements.removeValue(forKey: text) {
+                calls.forEach { $0.resolve(["finished": finished]) }
+            }
+        }
         shortcutObserver = NotificationCenter.default.addObserver(
             forName: GSShortcutRouter.didRequest, object: nil, queue: .main
         ) { [weak self] note in
@@ -129,6 +154,12 @@ public class GSNativePlugin: CAPPlugin, CAPBridgedPlugin {
             NotificationCenter.default.removeObserver(observer)
         }
         if let observer = routeObserver {
+            NotificationCenter.default.removeObserver(observer)
+        }
+        if let observer = voiceOverObserver {
+            NotificationCenter.default.removeObserver(observer)
+        }
+        if let observer = announcementObserver {
             NotificationCenter.default.removeObserver(observer)
         }
         if let observer = interruptionObserver {
@@ -208,6 +239,31 @@ public class GSNativePlugin: CAPPlugin, CAPBridgedPlugin {
                 "screenReader": UIAccessibility.isVoiceOverRunning,
                 "switchControl": UIAccessibility.isSwitchControlRunning
             ])
+        }
+    }
+
+    /// announce (build 24, tracker 22.8): VoiceOver says the text, queued
+    /// after anything it is already saying, and the call resolves when it has
+    /// finished, so no timing tone starts over the words. Without VoiceOver it
+    /// resolves at once. A safety timeout resolves it if iOS never reports.
+    @objc func announce(_ call: CAPPluginCall) {
+        let text = call.getString("text") ?? ""
+        let timeout = call.getDouble("timeoutSec") ?? 15
+        DispatchQueue.main.async {
+            guard UIAccessibility.isVoiceOverRunning, !text.isEmpty else {
+                call.resolve(["finished": true, "voiceOver": false])
+                return
+            }
+            self.pendingAnnouncements[text, default: []].append(call)
+            let message = NSAttributedString(string: text, attributes: [.accessibilitySpeechQueueAnnouncement: true])
+            UIAccessibility.post(notification: .announcement, argument: message)
+            DispatchQueue.main.asyncAfter(deadline: .now() + timeout) { [weak self] in
+                guard let self = self, var calls = self.pendingAnnouncements[text],
+                      let index = calls.firstIndex(where: { $0 === call }) else { return }
+                calls.remove(at: index)
+                self.pendingAnnouncements[text] = calls.isEmpty ? nil : calls
+                call.resolve(["finished": false, "timedOut": true])
+            }
         }
     }
 

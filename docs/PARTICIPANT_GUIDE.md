@@ -307,7 +307,7 @@ instructor can set new times for each street you use often.
 ## 9. If something does not work
 
 **I hear no sound.** Press the volume up button on the side of the phone; the
-app cannot raise the volume itself, and Home tells you when it is low. In
+app cannot raise the volume itself. In
 **Accessibility**, press **Play a test sound**: in the iPhone app it also says
 whether sound is on and how loud the phone is set. The silent switch does not
 affect the app.

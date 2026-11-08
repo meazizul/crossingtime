@@ -601,6 +601,13 @@ function gsReportLine(entry) {
     return `${when}  ${where}: ${compared}${noisy}`;
   }
   const mark = entry.correct ? "correct" : "incorrect";
+  // Build 24 (tracker 20.16): judged against the "about the same" range,
+  // k x the crossing time, not the margin. A close call accepts two answers.
+  if (Number.isFinite(entry.sameRangeSec)) {
+    const accepted = Array.isArray(entry.accepted) && entry.accepted.length ? entry.accepted : [entry.expected];
+    const truth = accepted.length > 1 ? `"${accepted.join('" or "')}"` : `"${accepted[0]}"`;
+    return `${when}  ${where}: ${compared}, about the same within ${gsSec(entry.sameRangeSec)}; answered "${entry.answer}", correct answer ${truth} — ${mark}${gsHowMuchPhrase(entry.howMuch)}`;
+  }
   return `${when}  ${where}: ${compared}, margin ${gsSec(entry.marginSec)}; answered "${entry.answer}", it was "${entry.expected}" — ${mark}${gsHowMuchPhrase(entry.howMuch)}`;
 }
 
@@ -717,7 +724,8 @@ const GS_CSV_COLUMNS = [
   "sample or warning time (s)", "crossing time (s)", "difference (s)", "margin (s)",
   "answer", "correct answer", "result",
   "how much tapped (s)", "how much real difference (s)", "how much off by (s)", "how much result",
-  "cancelled or skipped"
+  "cancelled or skipped",
+  "about the same range (s)"
 ];
 
 function gsCsvCell(value) {
@@ -754,7 +762,7 @@ function gsCsvRow(entry, { clientCode = "", build = "" } = {}) {
       entry.never || (entry.skipped && entry.skip === "vehicle") ? "" : gsCsvNumber(entry.diffSec),
       gsCsvNumber(entry.marginSec),
       timing ? "" : (entry.answer || ""),
-      timing ? "" : (entry.expected || ""),
+      timing ? "" : (Array.isArray(entry.accepted) && entry.accepted.length ? entry.accepted.join(" or ") : (entry.expected || "")),
       result
     ];
   const howMuch = legacyEstimate
@@ -765,7 +773,8 @@ function gsCsvRow(entry, { clientCode = "", build = "" } = {}) {
   return [
     gsCsvDate(d), gsCsvTime(d),
     clientCode, build, label, street, entry.direction || "", entry.sense || "",
-    ...main, ...howMuch, cancelled
+    ...main, ...howMuch, cancelled,
+    timing || !Number.isFinite(entry.sameRangeSec) ? "" : gsCsvNumber(entry.sameRangeSec)
   ].map(gsCsvCell).join(",");
 }
 

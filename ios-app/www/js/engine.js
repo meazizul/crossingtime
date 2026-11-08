@@ -1209,7 +1209,8 @@
         ["liveReplay", ["always", "errors", "never", "choose"]],
         ["liveConfirm", ["sound", "vibration"]],
         ["playAgain", ["on", "off", "choose"]],
-        ["trafficSide", ["right", "left"]]
+        ["trafficSide", ["right", "left"]],
+        ["sameRange", ["12", "8", "10", "11", "13", "14", "15", "20", "25"]]
       ]
     });
 
@@ -2173,6 +2174,9 @@
     let srAnnounceClearTimer = null;
     function announceScreenReader(message, { force = false, speak = true } = {}) {
       if (!message) return;
+      // Nothing is said while the app is not the screen in front: VoiceOver
+      // would read it over another app (tracker 22.1).
+      if (document.hidden) return;
       // force: the replay word and the descriptions (build 15) are meant for
       // the quiet stretch; speak: false when the text is already being spoken
       // by the app itself, so self-voicing does not say it twice.
@@ -2351,18 +2355,74 @@
     }
 
     /* Asks the native shell whether VoiceOver or TalkBack is on. The web
-     * build cannot know, so it speaks for itself. */
-    function gsRefreshScreenReader() {
-      if (!isNativeShell) return;
+     * build cannot know, so it speaks for itself.
+     * Build 24 (tracker 22.2): the shells also report every change while the
+     * app is open ("screenReader" events), and gsScreenReaderKnown resolves
+     * once the first answer is in, so nothing that depends on it (the first
+     * thing said at launch) runs on a guess. */
+    function gsScreenReaderPlugin() {
+      if (!isNativeShell) return null;
       const plugin = nativePlatform === "android" ? CapacitorGlobal?.Plugins?.GSAndroid : GSNativePlugin;
-      if (!plugin || typeof plugin.accessibilityStatus !== "function") return;
+      return plugin && typeof plugin.accessibilityStatus === "function" ? plugin : null;
+    }
+    let gsScreenReaderKnownResolve = null;
+    const gsScreenReaderKnown = new Promise((resolve) => { gsScreenReaderKnownResolve = resolve; });
+    function gsScreenReaderAnswered() {
+      if (gsScreenReaderKnownResolve) { gsScreenReaderKnownResolve(gsScreenReaderOn()); gsScreenReaderKnownResolve = null; }
+    }
+    function gsRefreshScreenReader() {
+      const plugin = gsScreenReaderPlugin();
+      if (!plugin) { gsScreenReaderAnswered(); return Promise.resolve(gsScreenReaderOn()); }
       try {
-        Promise.resolve(plugin.accessibilityStatus()).then((status) => {
+        return Promise.resolve(plugin.accessibilityStatus()).then((status) => {
           if (status && typeof status.screenReader === "boolean") gsScreenReaderRunning = status.screenReader;
-        }).catch(() => {});
+          gsScreenReaderAnswered();
+          return gsScreenReaderOn();
+        }).catch(() => { gsScreenReaderAnswered(); return gsScreenReaderOn(); });
       } catch (error) {
-        /* keep the last value */
+        gsScreenReaderAnswered();
+        return Promise.resolve(gsScreenReaderOn());
       }
+    }
+    (function gsListenForScreenReader() {
+      const plugin = gsScreenReaderPlugin();
+      if (!plugin || typeof plugin.addListener !== "function") return;
+      try {
+        plugin.addListener("screenReader", (event) => {
+          if (typeof event?.screenReader === "boolean") gsScreenReaderRunning = event.screenReader;
+        });
+      } catch (error) { /* older shell: checked again on return to the app */ }
+    })();
+    // An older shell that never answers must not hold anything up for long.
+    setTimeout(gsScreenReaderAnswered, 1500);
+
+    /*
+     * Says something through the screen reader and calls onDone when it is
+     * over (tracker 22.8). On iPhone VoiceOver reports the end of an
+     * announcement, so the tones that follow wait for the words. Where the
+     * end cannot be known (TalkBack, a browser), the wait is worked out from
+     * the number of words at a slow speaking rate, so a tone is not started
+     * on a guess that is too short.
+     */
+    function gsScreenReaderWaitSec(text) {
+      const words = String(text || "").trim().split(/\s+/).filter(Boolean).length;
+      return Math.max(1.5, 0.6 + words * 0.45);
+    }
+    function gsScreenReaderSay(text, { onDone = null } = {}) {
+      let finished = false;
+      const done = () => { if (finished) return; finished = true; if (typeof onDone === "function") onDone(); };
+      if (!text || document.hidden) { if (onDone) setTimeout(done, 0); return; }
+      const plugin = nativePlatform === "ios" ? GSNativePlugin : null;
+      if (plugin && typeof plugin.announce === "function") {
+        try {
+          Promise.resolve(plugin.announce({ text })).then(done, done);
+          // Never stuck: the shell has its own timeout too.
+          setTimeout(done, 16000);
+          return;
+        } catch (error) { /* fall through to the live region */ }
+      }
+      announceScreenReader(text, { force: true, speak: false });
+      setTimeout(done, gsScreenReaderWaitSec(text) * 1000);
     }
 
     function gsCanSpeakAloud() {
@@ -2376,7 +2436,9 @@
       if (!a11ySettings.sayReplay) return 0;
       if (gsScreenReaderOn() || !gsCanSpeakAloud()) {
         if (!announced) announceScreenReader("Replay.", { force: true, speak: false });
-        return gsScreenReaderOn() ? 0.6 : 0;
+        // Long enough for "Replay" at a slow speaking rate (tracker 22.8;
+        // it was 0.6 s).
+        return gsScreenReaderOn() ? gsScreenReaderWaitSec("Replay.") : 0;
       }
       gsSpeak("Replay", { interrupt: true });
       return GS_REPLAY_INTRO_SEC;
@@ -2391,9 +2453,16 @@
         finish(minSec * 1000);
         return false;
       }
-      if (gsScreenReaderOn() || !gsCanSpeakAloud()) {
+      if (gsScreenReaderOn()) {
+        // The next step waits for the screen reader to finish the words
+        // (tracker 22.8; it used to wait a fixed 1.5 s).
+        const saidAt = performance.now();
+        gsScreenReaderSay(text, { onDone: () => finish(minSec * 1000 - (performance.now() - saidAt)) });
+        return true;
+      }
+      if (!gsCanSpeakAloud()) {
         announceScreenReader(text, { force: true, speak: false });
-        finish(Math.max(minSec, gsScreenReaderOn() ? 1.5 : 0) * 1000);
+        finish(minSec * 1000);
         return true;
       }
       // If the speech engine never reports the end (some Android engines,
@@ -3321,7 +3390,6 @@
             status.ignoresSilentSwitch ? "It plays even with the silent switch on." : "The silent switch may mute it.",
             `Phone volume ${Math.round((status.outputVolume || 0) * 100)}%.`
           ];
-          if ((status.outputVolume || 0) < GS_LOW_VOLUME) parts.push(GS_LOW_VOLUME_TIP);
           soundTestNote.textContent = parts.join(" ");
           announceScreenReader(soundTestNote.textContent);
         }, 400);
@@ -3519,12 +3587,12 @@
     });
 
     /*
-     * The app cannot raise the phone's volume itself; only the side buttons
-     * can. So when the phone is turned well down, say so once per launch
-     * rather than leave a student wondering why the cues are faint.
+     * Build 24 (tracker 22.7): no volume tip. Design (Cindi, Nov 4 and 7
+     * 2026): the app does not tell the user to raise the phone's volume; a
+     * spoken tip cannot help someone whose volume is too low to hear it, and
+     * some students use the app visually and need no sound. "Play a test
+     * sound" under Accessibility is there for anyone who wants to check.
      */
-    const GS_LOW_VOLUME = 0.5;
-    const GS_LOW_VOLUME_TIP = "Your phone volume is low. Press the volume up button on the side of the phone.";
 
     async function gsNativeAudioStatus() {
       if (!nativeSound || typeof GSNativePlugin?.audioStatus !== "function") return null;
@@ -3548,18 +3616,11 @@
       if (audioContext && nativeSound) audioContext.outputLatency = nativeOutputLatency;
     }
 
-    let volumeTipAnnounced = false;
-    async function warnIfVolumeLow() {
+    /* The output delay is read again whenever the sound route may have
+     * changed. Nothing is shown or said about the volume (22.7). */
+    async function gsRefreshAudioStatus() {
       const status = await gsNativeAudioStatus();
       if (status && Number.isFinite(status.outputLatency)) nativeOutputLatency = status.outputLatency;
-      const tip = document.getElementById("volumeTip");
-      if (!status || !tip) return;
-      const low = a11ySettings.outputMode !== "visual-only" && (status.outputVolume ?? 1) < GS_LOW_VOLUME;
-      tip.hidden = !low;
-      if (low && !volumeTipAnnounced) {
-        volumeTipAnnounced = true;
-        announceScreenReader(GS_LOW_VOLUME_TIP);
-      }
     }
     if (nativeSound && typeof GSNativePlugin?.addListener === "function") {
       try {
@@ -3568,19 +3629,19 @@
         GSNativePlugin.addListener("audioInterrupted", (event) => { gsAudioInterrupted(event?.reason || "native"); });
       } catch (error) { /* older app: the web clock check still runs */ }
       try {
-        GSNativePlugin.addListener("volume", () => { warnIfVolumeLow(); });
+        GSNativePlugin.addListener("volume", () => { gsRefreshAudioStatus(); });
       } catch (error) {
         /* the check on returning to the app still runs */
       }
     }
-    // Checked again on returning to the app, in case the volume was changed.
+    // Checked again on returning to the app, in case headphones changed.
     document.addEventListener("visibilitychange", () => {
-      if (!document.hidden) warnIfVolumeLow();
+      if (!document.hidden) gsRefreshAudioStatus();
     });
 
     const unlockAudio = () => {
       warmUpAudio();
-      warnIfVolumeLow();
+      gsRefreshAudioStatus();
       // Only the native shell on iOS 16 needs the keep-alive. From iOS 17 the
       // web view takes navigator.audioSession.type = "playback" instead (see
       // configureWebAudioSession), and a looping media element alongside Web
@@ -3627,8 +3688,12 @@
     hapticsSupportNote.textContent = describeHapticsSupport();
 
     if (pendingStatusMessage) {
-      setStatus(pendingStatusMessage);
-      announceScreenReader(pendingStatusMessage);
+      // Shown, not announced on its own at launch (tracker 22.1): VoiceOver
+      // reads it where it is. Self-voicing still says it, once the app knows
+      // that no screen reader is running.
+      const message = pendingStatusMessage;
+      setStatus(message);
+      gsScreenReaderKnown.then(() => { if (gsSelfVoiceOn() && !document.hidden) gsSpeak(message); });
     }
 
     // Is VoiceOver or TalkBack on? Asked at start and whenever the app comes

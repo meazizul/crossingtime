@@ -133,14 +133,14 @@ test("F3: Export for Excel gives a CSV file, one try per row, one value per colu
   await openProgress(page);
   const csv = await page.evaluate(() => gsBuildCsv({ clientCode: "K7", build: "14" }));
   const rows = csv.trim().split("\r\n");
-  expect(rows[0]).toBe("date,time,student code,build,activity,street,direction,hearing or vision,sample or warning time (s),crossing time (s),difference (s),margin (s),answer,correct answer,result,how much tapped (s),how much real difference (s),how much off by (s),how much result,cancelled or skipped");
+  expect(rows[0]).toBe("date,time,student code,build,activity,street,direction,hearing or vision,sample or warning time (s),crossing time (s),difference (s),margin (s),answer,correct answer,result,how much tapped (s),how much real difference (s),how much off by (s),how much result,cancelled or skipped,about the same range (s)");
   expect(rows).toHaveLength(6);                           // five tries, one header
   const cols = rows.map((r) => r.split(",").length);
-  expect(new Set(cols)).toEqual(new Set([20]));
+  expect(new Set(cols)).toEqual(new Set([21]));   // build 24 added the "about the same" range
   const street = rows.find((r) => r.includes("At the street,full street,right"));
   expect(street).toContain("K7,14,At the street,full street,right,hearing,6.20,8.00,-1.80,0.40,shorter,shorter,correct,2.10,1.80,0.30,within margin,");
   const cancelled = rows.slice(1).find((r) => r.includes("vision"));
-  expect(cancelled).toMatch(/cancelled,,,,,cancelled judgment$/);
+  expect(cancelled).toMatch(/cancelled,,,,,cancelled judgment,$/);
   // In a browser the file downloads.
   await page.click("#sendReportBtn");
   const [download] = await Promise.all([page.waitForEvent("download"), page.click("#csvReportBtn")]);

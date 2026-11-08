@@ -46,6 +46,9 @@ public class GSAndroidPlugin extends Plugin {
     private boolean ttsFailed = false;
     private int utteranceCounter = 0;
     private final Map<String, PluginCall> speaking = new ConcurrentHashMap<>();
+    private AccessibilityManager accessibilityManager;
+    private AccessibilityManager.TouchExplorationStateChangeListener touchListener;
+    private AccessibilityManager.AccessibilityStateChangeListener stateListener;
 
     @Override
     public void load() {
@@ -70,6 +73,34 @@ public class GSAndroidPlugin extends Plugin {
         } catch (RuntimeException error) {
             ttsFailed = true;
         }
+        // Build 24 (tracker 22.2): tell the page whenever TalkBack is turned on
+        // or off, so the app changes at once instead of on the next launch.
+        try {
+            accessibilityManager = (AccessibilityManager) getContext().getSystemService(Context.ACCESSIBILITY_SERVICE);
+            if (accessibilityManager != null) {
+                touchListener = enabled -> notifyScreenReader();
+                stateListener = enabled -> notifyScreenReader();
+                accessibilityManager.addTouchExplorationStateChangeListener(touchListener);
+                accessibilityManager.addAccessibilityStateChangeListener(stateListener);
+            }
+        } catch (RuntimeException ignored) { }
+    }
+
+    private boolean screenReaderOn() {
+        try {
+            AccessibilityManager manager = accessibilityManager != null
+                ? accessibilityManager
+                : (AccessibilityManager) getContext().getSystemService(Context.ACCESSIBILITY_SERVICE);
+            return manager != null && manager.isEnabled() && manager.isTouchExplorationEnabled();
+        } catch (RuntimeException error) {
+            return false;
+        }
+    }
+
+    private void notifyScreenReader() {
+        com.getcapacitor.JSObject data = new com.getcapacitor.JSObject();
+        data.put("screenReader", screenReaderOn());
+        notifyListeners("screenReader", data);
     }
 
     private void finish(String id) {
@@ -79,6 +110,12 @@ public class GSAndroidPlugin extends Plugin {
 
     @Override
     protected void handleOnDestroy() {
+        if (accessibilityManager != null) {
+            try {
+                if (touchListener != null) accessibilityManager.removeTouchExplorationStateChangeListener(touchListener);
+                if (stateListener != null) accessibilityManager.removeAccessibilityStateChangeListener(stateListener);
+            } catch (RuntimeException ignored) { }
+        }
         if (tts != null) {
             try { tts.stop(); tts.shutdown(); } catch (RuntimeException ignored) { }
             tts = null;
@@ -164,15 +201,8 @@ public class GSAndroidPlugin extends Plugin {
 
     @PluginMethod
     public void accessibilityStatus(PluginCall call) {
-        boolean screenReader = false;
-        try {
-            AccessibilityManager manager = (AccessibilityManager) getContext().getSystemService(Context.ACCESSIBILITY_SERVICE);
-            screenReader = manager != null && manager.isEnabled() && manager.isTouchExplorationEnabled();
-        } catch (RuntimeException error) {
-            screenReader = false;
-        }
         com.getcapacitor.JSObject result = new com.getcapacitor.JSObject();
-        result.put("screenReader", screenReader);
+        result.put("screenReader", screenReaderOn());
         call.resolve(result);
     }
 }

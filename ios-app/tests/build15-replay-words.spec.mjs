@@ -161,19 +161,28 @@ test("comparison practice: a right answer says Correct and 'about the same' is s
   await setTimes(page, "4", "8", "0.4");
   await page.evaluate(() => gsShowScreen("compare"));
   await page.evaluate(() => {
-    Object.assign(gsCompareState, { phase: "answering", intervalSec: 8.1, crossingSec: 8, marginSec: 0.4, expected: "same" });
+    Object.assign(gsCompareState, { phase: "answering", intervalSec: 8.1, crossingSec: 8, marginSec: 0.4, rangeSec: 0.96, expected: "same" });
     window.__spoken = [];
     gsCompareAnswer("same");
   });
   await tick(page, 50);
   expect(await spoken(page)).toEqual(["Correct."]);
   await page.evaluate(() => {
-    Object.assign(gsCompareState, { phase: "answering", intervalSec: 8.1, crossingSec: 8, marginSec: 0.4, expected: "same" });
+    // Build 24 (20.16): 8.1 s is inside the range, so "longer" is also
+    // correct; "shorter" is the wrong direction.
+    Object.assign(gsCompareState, { phase: "answering", intervalSec: 8.1, crossingSec: 8, marginSec: 0.4, rangeSec: 0.96, expected: "same" });
     window.__spoken = [];
-    gsCompareAnswer("longer");
+    gsCompareAnswer("shorter");
   });
   await tick(page, 50);
-  expect(await spoken(page)).toEqual(["Not correct. It was about the same."]);
+  expect(await spoken(page)).toEqual(["Not correct. It was about the same, a little longer."]);
+  await page.evaluate(() => {
+    Object.assign(gsCompareState, { phase: "answering", intervalSec: 9.5, crossingSec: 8, marginSec: 0.4, rangeSec: 0.96, expected: "longer" });
+    window.__spoken = [];
+    gsCompareAnswer("same");
+  });
+  await tick(page, 50);
+  expect(await spoken(page)).toEqual(["Not correct. It was longer."]);
 });
 
 test("comparison preparation and the street: the replay is described after it", async ({ page }) => {
