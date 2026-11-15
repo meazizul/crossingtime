@@ -1578,6 +1578,18 @@
       const route = `${url.host}${url.pathname}`.replace(/^\/+|\/+$/g, "");
       const token = url.searchParams.get("ts") || (url.hash.startsWith("#ts=") ? url.hash.slice(4) : "");
       if (route === "setup" && token) {
+        // Several students on this phone: the installed app's link goes to
+        // the student it was made for, as the web link does (tracker 20.4).
+        // A switch restarts the app; the token rides in the address and is
+        // applied after the restart by importSharedTimingSettings.
+        const forStudent = parseShareToken(token);
+        if (forStudent?.code && typeof gsStudentsRouteSetupLink === "function") {
+          try {
+            window.history.replaceState({}, document.title, `${window.location.pathname}${window.location.search}#ts=${token}`);
+          } catch (error) { /* the link is still applied below */ }
+          if (gsStudentsRouteSetupLink(forStudent.code)) return true;
+          clearImportedHash();
+        }
         const ok = applyShareToken(token);
         const message = ok ? "Your instructor's setup is now on this device." : "This setup link is invalid.";
         setStatus(message, ok ? "neutral" : "warn");
