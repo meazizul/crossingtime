@@ -293,7 +293,8 @@ November 2026). It is the first section of Instructor setup.
   code another student on the phone already has. A **setup link** goes to the
   student it was made for: if another student on the phone has its code, the
   app switches to that student first; if no one has it, that student is added
-  (build 21).
+  (build 21). The installed app's own link (`gapsense://setup`) does the same
+  since build 26; before then only the web link did.
 - Adding, switching and removing are all or nothing: if the phone's storage
   for the app is full, nothing changes and the app says so (build 21).
 - Accessibility settings (sound, visual or vibration feedback, voice,
@@ -547,8 +548,16 @@ them are the two exceptions, and both are placed so they never overlap a tone.
 ### Siri and shortcuts
 On iPhone, say "Practice my timing in CrossingTime", "Comparison preparation in
 CrossingTime", "Comparison practice in CrossingTime" or "At the street in CrossingTime".
-They work with no setup and appear in the Shortcuts app. On Android, touch and
-hold the app icon. The **Siri and shortcuts** screen explains both.
+They appear in the Shortcuts app; the first time, Siri may ask whether to turn
+them on. On Android, touch and hold the app icon.
+
+**Your own Siri phrase (iPhone, build 26).** The **Siri and shortcuts** screen
+lists the four activities, like Seeing AI's Siri Shortcuts page. A check mark
+and the phrase show which ones have a phrase. Choosing one with no phrase adds
+it at once and shows Apple's sheet ("Shortcut added"), where **Change Voice
+Phrase** records the student's own words; choosing one that has a phrase
+offers to change or remove it. Saying the phrase opens that activity. Each
+row is one button, so VoiceOver reads the activity and its phrase together.
 
 ---
 
@@ -612,7 +621,9 @@ gets squashed, not louder. Values above `1` in `TEST_TUNING` do the same thing.
   practice and At the street), `js/signal.js` (Comparison preparation), and
   `js/app.js` (screens, Home, Progress, sending, Siri page, demo mode).
 - **Native shell** (Capacitor). On iOS, `GapSenseNative.swift` adds a haptics
-  plugin with one long-lived Core Haptics engine, the Siri App Shortcuts, and
+  plugin with one long-lived Core Haptics engine, the Siri App Shortcuts, the
+  student's own Siri phrases (build 26: one `NSUserActivity` per activity and
+  Apple's add and edit voice shortcut sheets), and
   `gapsense://` link handling. Android declares the same link scheme and four
   launcher shortcuts, and (build 15) `GSAndroidPlugin` gives the window the
   page's background colour, so the edge-to-edge strips above and below the

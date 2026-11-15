@@ -31,8 +31,8 @@ let gsCurrentScreen = "home";
  * and CACHE_VERSION (sw.js). In the native app the real bundle values are
  * read from the App plugin and override these. */
 const GS_APP_VERSION = "1.0";
-const GS_APP_BUILD = "25";
-const GS_APP_DATE = "8 November 2026";
+const GS_APP_BUILD = "26";
+const GS_APP_DATE = "15 November 2026";
 
 async function gsRenderAbout() {
   const el = document.getElementById("aboutVersion");
@@ -925,6 +925,13 @@ function gsRenderDataPlace() {
   const phone = gsDataOnPhone();
   const note = document.getElementById("myDataNote");
   if (note) note.textContent = phone ? "Kept on this phone, and in your phone's own backup if it is on." : "Kept only in this browser.";
+  // About (tracker 14.1): the phone's own backup also has the data.
+  const about = document.getElementById("aboutPrivacy");
+  if (about) {
+    about.textContent = phone
+      ? "Free, open source, and private. The app collects no data: everything is kept on this phone, and in your phone's own backup if it is on. Nothing is sent unless you send it."
+      : "Free, open source, and private. The app collects no data: everything is kept only in this browser. Nothing is sent unless you send it.";
+  }
   const where = document.getElementById("deleteHistoryWhere");
   if (where) where.textContent = phone ? "It is deleted from this phone now, and from your phone's backup at its next backup." : "It is deleted from this browser.";
   // Several students on one phone: say whose history goes (tracker 20.3).
@@ -1023,6 +1030,96 @@ function gsRenderShortcuts() {
   if (ios) ios.hidden = platform !== "ios";
   if (android) android.hidden = platform !== "android";
   if (web) web.hidden = native;
+  if (platform === "ios") gsRenderSiriList();
+}
+
+/*
+ * Build 26 (tracker 25.2, Cindi's design of Nov 10 2026): the Siri page lists
+ * the four activities like Seeing AI's Siri Shortcuts page. A check mark and
+ * the phrase show which ones have a Siri phrase; choosing one shows Apple's
+ * own sheet (add, with Change Voice Phrase; or change or remove). iPhone only.
+ */
+const GS_SIRI_ACTIVITIES = [
+  ["practice", "Practice my timing"],
+  ["signal", "Comparison preparation"],
+  ["compare", "Comparison practice"],
+  ["live", "At the street"]
+];
+let gsSiriBusy = false;
+
+function gsSiriRowText(title, phrase) {
+  return phrase ? `${title}. Siri phrase: "${phrase}"` : `${title}. No Siri phrase yet`;
+}
+
+function gsSiriFillRow(button, title, phrase) {
+  button.dataset.added = phrase ? "true" : "false";
+  button.dataset.phrase = phrase || "";
+  const check = button.querySelector(".siri-check");
+  const name = button.querySelector(".siri-title");
+  const state = button.querySelector(".siri-state");
+  if (check) check.textContent = phrase ? "\u2713" : "";
+  if (name) name.textContent = title;
+  if (state) state.textContent = phrase ? `Siri phrase: "${phrase}"` : "No Siri phrase yet";
+  // One label, so VoiceOver reads the activity and its state together.
+  button.setAttribute("aria-label", gsSiriRowText(title, phrase));
+}
+
+async function gsRenderSiriList() {
+  const list = document.getElementById("siriList");
+  const fallback = document.getElementById("siriFallback");
+  if (!list) return;
+  const plugin = window.Capacitor?.Plugins?.GSNative;
+  let rows = null;
+  if (plugin && typeof plugin.siriShortcuts === "function") {
+    try { rows = (await plugin.siriShortcuts())?.shortcuts; } catch (error) { rows = null; }
+  }
+  if (!Array.isArray(rows)) {
+    // An older app without the Siri page: the Shortcuts app, as before.
+    list.hidden = true;
+    if (fallback) fallback.hidden = false;
+    return;
+  }
+  list.hidden = false;
+  if (fallback) fallback.hidden = true;
+  const byScreen = new Map(rows.map((row) => [row.screen, row]));
+  GS_SIRI_ACTIVITIES.forEach(([screen, title]) => {
+    let button = list.querySelector(`[data-siri="${screen}"]`);
+    if (!button) {
+      const item = document.createElement("li");
+      button = document.createElement("button");
+      button.type = "button";
+      button.className = "settings-action siri-row";
+      button.dataset.siri = screen;
+      button.innerHTML = '<span class="siri-check" aria-hidden="true"></span><span class="siri-text"><span class="siri-title"></span><span class="siri-state"></span></span>';
+      button.addEventListener("click", () => gsSiriChoose(screen, title));
+      item.appendChild(button);
+      list.appendChild(item);
+    }
+    const row = byScreen.get(screen);
+    gsSiriFillRow(button, title, row?.added ? (row.phrase || title) : "");
+  });
+}
+
+async function gsSiriChoose(screen, title) {
+  const plugin = window.Capacitor?.Plugins?.GSNative;
+  const note = document.getElementById("siriNote");
+  if (gsSiriBusy || !plugin || typeof plugin.siriShortcut !== "function") return;
+  gsSiriBusy = true;
+  if (note) note.textContent = "";
+  let result = null;
+  try { result = await plugin.siriShortcut({ screen }); } catch (error) { result = { result: "failed" }; }
+  gsSiriBusy = false;
+  const phrase = result?.phrase || "";
+  const messages = {
+    added: `${title} added to Siri. Say "${phrase || title}" to open it.`,
+    updated: `The Siri phrase for ${title} is now "${phrase}".`,
+    removed: `The Siri phrase for ${title} was removed.`,
+    failed: "Siri could not add it. Check that Siri is on in the iPhone's Settings, then try again."
+  };
+  const message = messages[result?.result] || "";
+  await gsRenderSiriList();
+  if (note) note.textContent = message;
+  if (message && typeof announceScreenReader === "function") announceScreenReader(message);
 }
 
 /*
@@ -1213,6 +1310,11 @@ function gsBindShell() {
 
   document.getElementById("openShortcutsAppBtn")?.addEventListener("click", () => {
     window.location.href = "shortcuts://";
+  });
+  // Phrases may have changed in the Shortcuts app meanwhile (tracker 25.2).
+  document.addEventListener("visibilitychange", () => {
+    const shortcuts = document.getElementById("screen-shortcuts");
+    if (!document.hidden && shortcuts && !shortcuts.hidden) gsRenderShortcuts();
   });
 
   // Times edited by hand are no longer the example values.

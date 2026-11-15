@@ -3,6 +3,8 @@ import Capacitor
 import CoreHaptics
 import AudioToolbox
 import AppIntents
+import Intents
+import IntentsUI
 import AVFoundation
 
 // MARK: - Bridge view controller
@@ -47,6 +49,10 @@ class MainViewController: CAPBridgeViewController {
 ///   stopSpeaking()
 ///   canOpen({ scheme })  whether a mail (mailto) or messaging (sms) app can open
 ///   pendingScreen()    the activity a Siri / Shortcuts request asked for, if any
+///   siriShortcuts()    build 26 (tracker 25.2): the four activities and the
+///                      Siri phrase the student has for each, if any
+///   siriShortcut({ screen })  show Apple's sheet to add a Siri phrase for that
+///                      activity, or to change or remove the one it has
 ///   log({ message })   write to the device log (diagnostics)
 ///
 /// Event "openScreen" { screen } fires when Siri or Shortcuts asks for an
@@ -66,6 +72,8 @@ public class GSNativePlugin: CAPPlugin, CAPBridgedPlugin {
         CAPPluginMethod(name: "speak", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "stopSpeaking", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "pendingScreen", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "siriShortcuts", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "siriShortcut", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "keepAwake", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "directTouchShow", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "directTouchHide", returnType: CAPPluginReturnPromise),
@@ -355,6 +363,32 @@ public class GSNativePlugin: CAPPlugin, CAPBridgedPlugin {
             call.resolve(["screen": screen])
         } else {
             call.resolve([:])
+        }
+    }
+
+    /// Build 26 (tracker 25.2): the Siri page lists the four activities with
+    /// the phrase the student recorded for each.
+    @objc func siriShortcuts(_ call: CAPPluginCall) {
+        GSSiriShortcuts.shared.list { rows in
+            call.resolve(["shortcuts": rows])
+        }
+    }
+
+    /// Build 26 (tracker 25.2): Apple's own sheet. For an activity with no
+    /// phrase it adds the shortcut and offers Change Voice Phrase; for one that
+    /// has a phrase it offers to change or remove it. Resolves when the sheet
+    /// closes: { result: added | updated | removed | cancelled | failed }.
+    @objc func siriShortcut(_ call: CAPPluginCall) {
+        guard let screen = call.getString("screen"), GSSiriShortcuts.title(for: screen) != nil else {
+            call.reject("Unknown activity")
+            return
+        }
+        DispatchQueue.main.async { [weak self] in
+            guard let controller = self?.bridge?.viewController else {
+                call.resolve(["result": "failed"])
+                return
+            }
+            GSSiriShortcuts.shared.present(screen: screen, from: controller, call: call)
         }
     }
 
@@ -649,6 +683,156 @@ struct GapSenseShortcuts: AppShortcutsProvider {
             shortTitle: "At the street",
             systemImageName: "figure.walk"
         )
+    }
+}
+
+// MARK: - Siri phrases of the student's own (build 26, tracker 25.2)
+
+/// The Siri page works like Seeing AI's (Cindi's design, Nov 10 2026): the four
+/// activities, each marked when it has a Siri phrase; tapping one shows Apple's
+/// standard sheet. Each activity is an NSUserActivity (types listed under
+/// NSUserActivityTypes in Info.plist); when the student says their phrase, iOS
+/// opens the app with that activity and the scene delegate hands it to
+/// GSShortcutRouter, the same path as the ready-made App Shortcuts phrases,
+/// which keep working.
+final class GSSiriShortcuts: NSObject, INUIAddVoiceShortcutViewControllerDelegate, INUIEditVoiceShortcutViewControllerDelegate {
+    static let shared = GSSiriShortcuts()
+
+    /// screen (as the page names it), title, suggested phrase
+    static let activities: [(screen: String, title: String)] = [
+        ("practice", "Practice my timing"),
+        ("signal", "Comparison preparation"),
+        ("compare", "Comparison practice"),
+        ("live", "At the street")
+    ]
+
+    static func title(for screen: String) -> String? {
+        activities.first { $0.screen == screen }?.title
+    }
+
+    static func activityType(for screen: String) -> String {
+        "com.gapsense.crossingpractice.open.\(screen)"
+    }
+
+    static func screen(forActivityType type: String) -> String? {
+        activities.first { activityType(for: $0.screen) == type }?.screen
+    }
+
+    static func userActivity(for screen: String) -> NSUserActivity? {
+        guard let title = title(for: screen) else { return nil }
+        let activity = NSUserActivity(activityType: activityType(for: screen))
+        activity.title = title
+        activity.isEligibleForPrediction = true
+        activity.isEligibleForSearch = false
+        activity.suggestedInvocationPhrase = title
+        activity.persistentIdentifier = activityType(for: screen)
+        activity.userInfo = ["screen": screen]
+        return activity
+    }
+
+    /// Hand a user activity from Siri to the page. True if it was one of ours.
+    @discardableResult
+    static func route(_ activity: NSUserActivity) -> Bool {
+        guard let screen = screen(forActivityType: activity.activityType) else { return false }
+        GSShortcutRouter.shared.request(screen)
+        return true
+    }
+
+    private var pendingCall: CAPPluginCall?
+
+    private func phrases(_ completion: @escaping ([String: INVoiceShortcut]) -> Void) {
+        INVoiceShortcutCenter.shared.getAllVoiceShortcuts { shortcuts, error in
+            if let error = error { NSLog("[GapSense] siri list error %@", error.localizedDescription) }
+            var byScreen: [String: INVoiceShortcut] = [:]
+            for shortcut in shortcuts ?? [] {
+                if let type = shortcut.shortcut.userActivity?.activityType,
+                   let screen = Self.screen(forActivityType: type) {
+                    byScreen[screen] = shortcut
+                }
+            }
+            DispatchQueue.main.async { completion(byScreen) }
+        }
+    }
+
+    func list(_ completion: @escaping ([[String: Any]]) -> Void) {
+        phrases { byScreen in
+            completion(Self.activities.map { item in
+                var row: [String: Any] = ["screen": item.screen, "title": item.title, "added": false]
+                if let shortcut = byScreen[item.screen] {
+                    row["added"] = true
+                    row["phrase"] = shortcut.invocationPhrase
+                }
+                return row
+            })
+        }
+    }
+
+    func present(screen: String, from presenter: UIViewController, call: CAPPluginCall) {
+        if pendingCall != nil {
+            call.resolve(["result": "busy"])
+            return
+        }
+        phrases { [weak self] byScreen in
+            guard let self = self else { return }
+            let sheet: UIViewController
+            if let existing = byScreen[screen] {
+                let edit = INUIEditVoiceShortcutViewController(voiceShortcut: existing)
+                edit.delegate = self
+                sheet = edit
+            } else if let activity = Self.userActivity(for: screen) {
+                let add = INUIAddVoiceShortcutViewController(shortcut: INShortcut(userActivity: activity))
+                add.delegate = self
+                sheet = add
+            } else {
+                call.resolve(["result": "failed"])
+                return
+            }
+            sheet.modalPresentationStyle = .formSheet
+            self.pendingCall = call
+            var top = presenter
+            while let shown = top.presentedViewController { top = shown }
+            top.present(sheet, animated: true)
+        }
+    }
+
+    private func finish(_ controller: UIViewController, _ result: [String: Any]) {
+        let call = pendingCall
+        pendingCall = nil
+        controller.dismiss(animated: true) {
+            call?.resolve(result)
+        }
+    }
+
+    // Add sheet
+    func addVoiceShortcutViewController(_ controller: INUIAddVoiceShortcutViewController, didFinishWith voiceShortcut: INVoiceShortcut?, error: Error?) {
+        if let error = error { NSLog("[GapSense] siri add error %@", error.localizedDescription) }
+        if let shortcut = voiceShortcut {
+            finish(controller, ["result": "added", "phrase": shortcut.invocationPhrase])
+        } else {
+            finish(controller, ["result": error == nil ? "cancelled" : "failed"])
+        }
+    }
+
+    func addVoiceShortcutViewControllerDidCancel(_ controller: INUIAddVoiceShortcutViewController) {
+        finish(controller, ["result": "cancelled"])
+    }
+
+    // Change or remove sheet
+    func editVoiceShortcutViewController(_ controller: INUIEditVoiceShortcutViewController, didUpdate voiceShortcut: INVoiceShortcut?, error: Error?) {
+        if let error = error { NSLog("[GapSense] siri edit error %@", error.localizedDescription) }
+        if let shortcut = voiceShortcut {
+            finish(controller, ["result": "updated", "phrase": shortcut.invocationPhrase])
+        } else {
+            finish(controller, ["result": error == nil ? "cancelled" : "failed"])
+        }
+    }
+
+    func editVoiceShortcutViewController(_ controller: INUIEditVoiceShortcutViewController, didDeleteVoiceShortcutWithIdentifier deletedVoiceShortcutIdentifier: UUID) {
+        finish(controller, ["result": "removed"])
+    }
+
+    func editVoiceShortcutViewControllerDidCancel(_ controller: INUIEditVoiceShortcutViewController) {
+        finish(controller, ["result": "cancelled"])
     }
 }
 

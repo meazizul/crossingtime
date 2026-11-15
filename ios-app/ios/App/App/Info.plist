@@ -20,6 +20,13 @@
 	<string>$(MARKETING_VERSION)</string>
 	<key>CFBundleVersion</key>
 	<string>$(CURRENT_PROJECT_VERSION)</string>
+	<key>NSUserActivityTypes</key>
+	<array>
+		<string>com.gapsense.crossingpractice.open.practice</string>
+		<string>com.gapsense.crossingpractice.open.signal</string>
+		<string>com.gapsense.crossingpractice.open.compare</string>
+		<string>com.gapsense.crossingpractice.open.live</string>
+	</array>
 	<key>CFBundleURLTypes</key>
 	<array>
 		<dict>

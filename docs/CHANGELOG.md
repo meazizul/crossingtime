@@ -8,6 +8,40 @@ than commit history. They are accurate to the day.
 
 ---
 
+## 2026-11-15 (build 26) — your own Siri phrase, setup links in the installed app, and the last privacy texts
+
+From Cindi Lashinsky's bug tracker (items 25.2, 20.4 and 14.1).
+
+- **Your own Siri phrase (25.2, iPhone).** The Siri and shortcuts screen's
+  "Open the Shortcuts app" button only opened the Shortcuts app's home
+  screen; Apple has no web address for one app's page there. The screen now
+  works like Seeing AI's (Cindi's design, 10 Nov): the four activities, each
+  with a check mark and its phrase when it has one. Choosing one adds it at
+  once and shows Apple's own sheet ("Shortcut added. To use it, say this
+  phrase to Siri."), with Change Voice Phrase to record the student's own
+  words, Done and Remove Shortcut; choosing it again offers to change or
+  remove the phrase. The page re-reads the phrases when the student comes
+  back to the app. The four ready-made phrases still work, and the page no
+  longer says they need no setup (the first time, Siri may ask to turn them
+  on). Android is unchanged. Checked in the iPhone 14 Pro Max simulator: the
+  list comes from iOS, the sheet appears, and after a relaunch the added
+  activity has its check mark. Still to check on a phone: that saying a
+  recorded phrase opens the activity, and VoiceOver on each row.
+- **Setup links in the installed app go to the right student (20.4).** With
+  several students on a phone, the installed app's `gapsense://setup` link
+  wrote its times and code into whichever student was selected. It now does
+  what the web link has done since build 21: a link for another student on
+  the phone switches to that student first, and a link for a code not on the
+  phone adds that student.
+- **The last three privacy texts (14.1).** About, the instructor notes and
+  the written report's footer still said the data never leaves the device.
+  They now say the app collects no data and that it is kept on the phone and
+  in the phone's own backup if it is on (in a browser: only in this browser).
+- **Tests.** 10 new tests (`build26-siri-setup-link-privacy.spec.mjs`); the two
+  20.4 link tests fail on build 25's code. Playwright: 309 passed, 1 skipped.
+  Simulator end-to-end on Cindi's 14 Pro Max: 168/168, and the Siri page
+  check 8/8.
+
 ## 2026-11-08 (build 25) — the rest of 22.6 and 22.8: every label readable, and the screen reader always finishes first
 
 From Cindi Lashinsky's bug tracker (items 22.6 and 22.8, whose first parts

@@ -707,7 +707,7 @@ function gsBuildReport(options = {}) {
   }
 
   lines.push("");
-  lines.push("Sent by the student from CrossingTime. No data leaves the device unless sent.");
+  lines.push("Sent by the student from CrossingTime. The app collects no data; this report reached you because the student sent it.");
   return lines.join("\n");
 }
 

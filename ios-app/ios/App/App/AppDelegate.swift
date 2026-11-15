@@ -91,6 +91,8 @@ class SceneDelegate: UIResponder, UIWindowSceneDelegate {
             _ = ApplicationDelegateProxy.shared.application(UIApplication.shared, open: context.url, options: [:])
         }
         for activity in connectionOptions.userActivities {
+            // A Siri phrase the student recorded (build 26, tracker 25.2).
+            if GSSiriShortcuts.route(activity) { continue }
             _ = ApplicationDelegateProxy.shared.application(UIApplication.shared, continue: activity, restorationHandler: { _ in })
         }
     }
@@ -102,6 +104,7 @@ class SceneDelegate: UIResponder, UIWindowSceneDelegate {
     }
 
     func scene(_ scene: UIScene, continue userActivity: NSUserActivity) {
+        if GSSiriShortcuts.route(userActivity) { return }
         _ = ApplicationDelegateProxy.shared.application(UIApplication.shared, continue: userActivity, restorationHandler: { _ in })
     }
 }

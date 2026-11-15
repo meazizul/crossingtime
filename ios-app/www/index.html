@@ -440,7 +440,7 @@
           <li><strong>Margin of error.</strong> You choose and set it. The app defaults to 0.40 seconds; 0.50 seconds has historically been taught with a stopwatch. There is no research yet on the right value.</li>
           <li><strong>Directions.</strong> A vehicle approaching from the <span data-near-side>left</span> is compared with the first-half time; from the <span data-far-side>right</span>, with the full-street time. Where traffic drives on the left, set that in Instructor setup and the two sides swap.</li>
           <li><strong>Feedback modes.</strong> Audio, visual, or both, under Accessibility. Visual-only supports Deaf students; vibration supports DeafBlind students in the installed app.</li>
-          <li><strong>Progress.</strong> The student can show you the Progress screen, or send you a written report. Data never leaves their device unless they send it.</li>
+          <li><strong>Progress.</strong> The student can show you the Progress screen, or send you a written report. The app collects no data: their practice is kept on their phone, and in the phone's own backup if it is on, and reaches you only if they send it.</li>
           <li><strong>Experimental.</strong> The adaptive margin is off by default and unproven; turn it on in Instructor setup only to try it.</li>
         </ul>
       </section>
@@ -449,7 +449,7 @@
         <h2 class="card-label">About</h2>
         <p class="field-help" id="aboutVersion">CrossingTime</p>
         <p class="field-help" id="aboutStorage"></p>
-        <p class="field-help">Free, open source, and private. Nothing leaves this device unless you send it.</p>
+        <p class="field-help" id="aboutPrivacy">Free, open source, and private. The app collects no data: everything is kept on this phone, and in your phone's own backup if it is on. Nothing is sent unless you send it.</p>
       </section>
     </section>
 
@@ -700,16 +700,24 @@
     <section id="screen-shortcuts" class="screen" aria-labelledby="screenTitle" hidden>
       <div id="shortcutsIos" hidden>
         <section class="card">
-          <h2 class="card-label">Open an activity with Siri</h2>
-          <p class="field-help">These work without any setup. Say "Hey Siri", then one of these:</p>
+          <h2 class="card-label" id="siriListTitle">Your own Siri phrase</h2>
+          <p class="field-help">Choose an activity to add it to Siri. Apple's sheet shows the phrase to say; choose Change Voice Phrase to record your own words. Choose it again later to change or remove the phrase.</p>
+          <ul class="siri-list" id="siriList" aria-labelledby="siriListTitle"></ul>
+          <p class="field-help" id="siriNote" role="status"></p>
+          <div id="siriFallback" hidden>
+            <p class="field-help">To use your own words, open the Shortcuts app, choose CrossingTime, and add any of the four to a shortcut with the name you want.</p>
+            <button class="settings-action primary" type="button" id="openShortcutsAppBtn">Open the Shortcuts app</button>
+          </div>
+        </section>
+        <section class="card">
+          <h2 class="card-label">Ready-made Siri phrases</h2>
+          <p class="field-help">Say "Hey Siri", then one of these. The first time, Siri may ask whether to turn them on; say or choose Turn On.</p>
           <ul class="plain-list">
             <li>"Practice my timing in CrossingTime"</li>
             <li>"Comparison preparation in CrossingTime"</li>
             <li>"Comparison practice in CrossingTime"</li>
             <li>"At the street in CrossingTime"</li>
           </ul>
-          <p class="field-help">To use your own words, open the Shortcuts app, choose CrossingTime, and add any of the four to a shortcut with the name you want.</p>
-          <button class="settings-action primary" type="button" id="openShortcutsAppBtn">Open the Shortcuts app</button>
         </section>
       </div>
       <div id="shortcutsAndroid" hidden>
