@@ -538,6 +538,16 @@ They work with or without self-voicing, never with a number of seconds. The
 native apps ask the system whether VoiceOver or TalkBack is running and, if
 so, hand the same words to the screen reader.
 
+**Choose this: here, or on each activity page (build 27).** Below "Announce
+results and describe the sounds", **Choose this** decides where that choice is
+made. **Here, for every activity** (the default) keeps one switch for the whole
+app. **On each activity page** gives Practice my timing, Comparison
+preparation, Comparison practice and At the street their own switch, just
+below the page's introduction, so a student can have results in words where a
+task is harder or the street is noisy, and not in a quiet room (Cindi, 15 Nov
+2026). Each page starts from the current choice. Choosing a verbosity level
+resets every page to that level.
+
 ### Screen reader
 **Announce cues** controls spoken feedback. Prompts and results are spoken
 straight away; announcements are **paused only while a replay plays**, so

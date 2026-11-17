@@ -51,6 +51,7 @@
     const a11ySayReplay = document.getElementById("a11ySayReplay");
     const a11yVerbosity = document.getElementById("a11yVerbosity");
     const a11yDescribeSounds = document.getElementById("a11yDescribeSounds");
+    const a11yDescribeWhere = document.getElementById("a11yDescribeWhere");
     const a11ySpeechRate = document.getElementById("a11ySpeechRate");
     const soundTestBtn = document.getElementById("soundTestBtn");
     const soundTestNote = document.getElementById("soundTestNote");
@@ -206,6 +207,10 @@
       // not a screen reader is running. Never a number of seconds.
       sayReplay: true,
       describeSounds: true,
+      // Build 27 (tracker F12, Cindi 15 Nov 2026): "all" = the switch in
+      // Accessibility applies to every activity; "each" = every activity page
+      // has its own switch (om-a11y-describe-<activity>).
+      describeWhere: "all",
       verbosity: "medium",
       speechRate: 1
     };
@@ -2497,12 +2502,41 @@
       return GS_REPLAY_INTRO_SEC;
     }
 
+    /* Build 27 (tracker F12): whether results are said in words in the
+     * activity on screen. With "On each activity page", each activity keeps
+     * its own choice; one not yet set follows the switch in Accessibility. */
+    const GS_RESULTS_WORDS_ACTIVITIES = ["practice", "signal", "compare", "live"];
+    function gsVisibleActivity() {
+      return GS_RESULTS_WORDS_ACTIVITIES.find((name) => {
+        const el = document.getElementById(`screen-${name}`);
+        return el && !el.hidden;
+      }) || null;
+    }
+    function gsDescribeOn(activity = gsVisibleActivity()) {
+      if (a11ySettings.describeWhere !== "each" || !activity) return a11ySettings.describeSounds;
+      const own = localStorage.getItem(`om-a11y-describe-${activity}`);
+      return own === null ? a11ySettings.describeSounds : own === "true";
+    }
+    function gsRenderResultsWordsSwitches() {
+      const each = a11ySettings.describeWhere === "each";
+      document.querySelectorAll("[data-results-words]").forEach((box) => {
+        const wrap = box.closest(".results-words-switch");
+        if (wrap) wrap.hidden = !each;
+        box.checked = gsDescribeOn(box.dataset.resultsWords);
+      });
+      const global = document.getElementById("a11yDescribeSounds");
+      if (global) {
+        global.disabled = each;
+        global.closest("label")?.classList.toggle("is-disabled", each);
+      }
+    }
+
     /* Speaks a description (or hands it to the screen reader). onDone runs
      * when the words are over and at least minSec have passed. Returns
      * whether anything was said. */
     function gsDescribe(text, { onDone = null, minSec = 0 } = {}) {
       const finish = (afterMs) => { if (onDone) setTimeout(onDone, Math.max(0, afterMs)); };
-      if (!a11ySettings.describeSounds || !text) {
+      if (!gsDescribeOn() || !text) {
         finish(minSec * 1000);
         return false;
       }
@@ -2534,7 +2568,7 @@
     /* The next step of an activity after a description: with nothing to say
      * it is an ordinary (cancellable) timer; after words, the words end it. */
     function gsDescribeThen(timers, text, fn, minSec, show = null) {
-      if (!a11ySettings.describeSounds || !text) {
+      if (!gsDescribeOn() || !text) {
         // Off (Speech: Low): the result is still shown and read in its short
         // form, "Correct." or "Not correct.", as Settings and the App Guide
         // say; only the description of the sounds is left out (tracker 20.2).
@@ -2933,7 +2967,7 @@
         suppressSrAnnouncements = false;
         resetState("Ready for another try.");
         renderPracticeScore();
-        const said = a11ySettings.describeSounds && gsDescribe(`${describe} Ready for another try.`);
+        const said = gsDescribeOn() && gsDescribe(`${describe} Ready for another try.`);
         // Off (Low): the verdict still shows and is read, in short (20.2).
         const shortVerdict = marks.length > 1 ? verdicts.join(", ") : gsVerdictWords(marks[0]?.feedbackType === "acceptable");
         const short = said ? "" : `${shortVerdict.replace(/^./, (c) => c.toUpperCase())}. Ready for another try.`;
@@ -3131,6 +3165,7 @@
       if ([0.8, 1, 1.25].includes(storedSpeechRate)) a11ySettings.speechRate = storedSpeechRate;
       if (storedSayReplay) a11ySettings.sayReplay = storedSayReplay === "true";
       if (storedDescribeSounds) a11ySettings.describeSounds = storedDescribeSounds === "true";
+      a11ySettings.describeWhere = localStorage.getItem("om-a11y-describe-where") === "each" ? "each" : "all";
       const storedVerbosity = localStorage.getItem("om-a11y-verbosity");
       if (["high", "medium", "low"].includes(storedVerbosity)) a11ySettings.verbosity = storedVerbosity;
       // No switch since build 20 (Cindi, 1 Nov 2026): the on-screen replay
@@ -3163,6 +3198,8 @@
       if (a11ySpeechRate) a11ySpeechRate.value = String(a11ySettings.speechRate);
       if (a11ySayReplay) a11ySayReplay.checked = a11ySettings.sayReplay;
       if (a11yDescribeSounds) a11yDescribeSounds.checked = a11ySettings.describeSounds;
+      if (a11yDescribeWhere) a11yDescribeWhere.value = a11ySettings.describeWhere;
+      gsRenderResultsWordsSwitches();
       if (a11yVerbosity) a11yVerbosity.value = a11ySettings.verbosity;
       applyA11ySettings();
     }
@@ -3432,6 +3469,8 @@
       localStorage.setItem("om-a11y-describe-sounds", String(more));
       if (a11ySayReplay) a11ySayReplay.checked = more;
       if (a11yDescribeSounds) a11yDescribeSounds.checked = more;
+      GS_RESULTS_WORDS_ACTIVITIES.forEach((name) => localStorage.removeItem(`om-a11y-describe-${name}`));
+      gsRenderResultsWordsSwitches();
       gsSpeak({ high: "Verbosity high.", medium: "Verbosity medium.", low: "Verbosity low." }[level]);
     });
 
@@ -3444,7 +3483,31 @@
     a11yDescribeSounds?.addEventListener("change", () => {
       a11ySettings.describeSounds = a11yDescribeSounds.checked;
       localStorage.setItem("om-a11y-describe-sounds", String(a11ySettings.describeSounds));
+      gsRenderResultsWordsSwitches();
       if (a11ySettings.describeSounds) gsSpeak("The app will announce results and describe the sounds.");
+    });
+
+    // Build 27 (tracker F12): choose it here for every activity, or on each
+    // activity page. Switching to "each" starts every page from the current
+    // choice, so nothing changes until the student changes a page's switch.
+    a11yDescribeWhere?.addEventListener("change", () => {
+      a11ySettings.describeWhere = a11yDescribeWhere.value === "each" ? "each" : "all";
+      localStorage.setItem("om-a11y-describe-where", a11ySettings.describeWhere);
+      if (a11ySettings.describeWhere === "each") {
+        GS_RESULTS_WORDS_ACTIVITIES.forEach((name) => {
+          localStorage.setItem(`om-a11y-describe-${name}`, String(a11ySettings.describeSounds));
+        });
+      }
+      gsRenderResultsWordsSwitches();
+      announceScreenReader(a11ySettings.describeWhere === "each"
+        ? "Each activity page now has its own switch for announcing results."
+        : "The switch here now applies to every activity.");
+    });
+    document.querySelectorAll("[data-results-words]").forEach((box) => {
+      box.addEventListener("change", () => {
+        localStorage.setItem(`om-a11y-describe-${box.dataset.resultsWords}`, String(box.checked));
+        announceScreenReader(box.checked ? "Results will be announced in words here." : "Results will not be announced in words here.");
+      });
     });
 
     /*

@@ -8,6 +8,23 @@ than commit history. They are accurate to the day.
 
 ---
 
+## 2026-11-17 (build 27) — results in words: for every activity, or on each activity page
+
+From Cindi Lashinsky's bug tracker (feature request F12, her decision by email
+on 15 November).
+
+- **Results in words, per activity (F12).** "Announce results and describe the
+  sounds" was one switch for the whole app. Below it, Accessibility now has
+  **Choose this**: **Here, for every activity** (the default, as before) or
+  **On each activity page**. With the second, each activity page (Practice my
+  timing, Comparison preparation, Comparison practice, At the street) shows its
+  own switch below its introduction. Each page starts from the current choice,
+  and each student keeps their own, like the other accessibility settings.
+  Choosing a verbosity level resets every page to that level. With the choice
+  made on each page, the switch in Accessibility is greyed out.
+- **Tests.** 6 new tests (`build27-results-words.spec.mjs`). Playwright: 315
+  passed, 1 skipped.
+
 ## 2026-11-15 (build 26) — your own Siri phrase, setup links in the installed app, and the last privacy texts
 
 From Cindi Lashinsky's bug tracker (items 25.2, 20.4 and 14.1).

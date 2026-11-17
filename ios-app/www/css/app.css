@@ -2287,3 +2287,9 @@ body.pad-hold .gesture-overlay.swipes .pad-hold-hint {
 }
 .siri-row .siri-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
 .siri-row .siri-state { font-weight: 400; font-size: 0.9em; overflow-wrap: anywhere; }
+
+/* Build 27 (tracker F12): an activity page's own switch for results in
+   words, shown only when Accessibility says to choose it on each page. */
+.results-words-switch { display: flex; align-items: center; gap: 10px; margin: 6px 0 12px; font-weight: 600; }
+.results-words-switch input { width: 1.4em; height: 1.4em; flex: 0 0 auto; }
+label.is-disabled { opacity: 0.55; }
