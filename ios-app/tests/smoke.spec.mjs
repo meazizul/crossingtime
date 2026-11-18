@@ -199,7 +199,7 @@ test("web build keeps pinch zoom but blocks double-tap zoom; Help shows the buil
   expect(await page.evaluate(() => getComputedStyle(document.body).touchAction)).toBe("manipulation");
   expect(await page.evaluate(() => getComputedStyle(document.getElementById("settingsTrigger")).touchAction)).toBe("manipulation");
   await page.evaluate(() => gsShowScreen("help"));
-  await expect(page.locator("#aboutVersion")).toHaveText("CrossingTime version 1.0, build 27 (web), 17 November 2026.");
+  await expect(page.locator("#aboutVersion")).toHaveText("CrossingTime version 1.0, build 27 (web), 18 November 2026.");
 });
 
 test("native shell: pinch zoom allowed, bundle version, CrossingTime haptics plugin, playback audio session", async ({ page }) => {
@@ -229,7 +229,7 @@ test("native shell: pinch zoom allowed, bundle version, CrossingTime haptics plu
   expect(meta).not.toContain("user-scalable=no");
   expect(meta).not.toContain("maximum-scale=1");
   await page.evaluate(() => gsShowScreen("help"));
-  await expect(page.locator("#aboutVersion")).toHaveText("CrossingTime version 1.0, build 13 (iPhone app), 17 November 2026.");   // the stubbed App plugin reports build 13
+  await expect(page.locator("#aboutVersion")).toHaveText("CrossingTime version 1.0, build 13 (iPhone app), 18 November 2026.");   // the stubbed App plugin reports build 13
   await expect(page.locator("#hapticsSupportNote")).toContainText("Native haptics active");
   await page.evaluate(() => { hapticCue("marker"); hapticCue("reference_ok"); hapticCue("reference_bad"); hapticCue("ready"); });
   expect(await page.evaluate(() => window.__haptics)).toEqual(["marker", "reference_ok", "reference_bad", "ready"]);

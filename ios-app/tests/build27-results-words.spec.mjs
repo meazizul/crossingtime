@@ -99,3 +99,87 @@ test("F12: a verbosity level resets every page to that level", async ({ page }) 
   await page.evaluate(() => gsShowScreen("signal"));
   await expect(page.locator('#screen-signal [data-results-words="signal"]')).not.toBeChecked();
 });
+
+/* ---------------- 22.5: follow the phone's text size and contrast ---------------- */
+
+function stubShell(page, platform, { phoneScale = null, androidScale = null, announceNever = false } = {}) {
+  return page.addInitScript(({ platform, phoneScale, androidScale, announceNever }) => {
+    if (phoneScale !== null) window.__gsPhoneTextScale = phoneScale;
+    window.__announced = [];
+    const plugins = {
+      GSNative: {
+        haptic: async () => {},
+        pendingScreen: async () => ({}),
+        accessibilityStatus: async () => ({ screenReader: true }),
+        announce: ({ text }) => { window.__announced.push(text); return announceNever ? new Promise(() => {}) : Promise.resolve({ finished: true }); },
+        addListener: () => ({ remove() {} })
+      },
+      App: { getInfo: async () => ({ version: "1.0", build: "27" }), addListener: () => {}, getLaunchUrl: async () => ({}) },
+      StatusBar: { setStyle: async () => {} }
+    };
+    if (platform === "android") {
+      plugins.GSAndroid = { textScale: async () => ({ scale: androidScale ?? 1 }), accessibilityStatus: async () => ({ screenReader: false }), setWindowBackground: async () => {} };
+    }
+    window.Capacitor = { isNativePlatform: () => true, getPlatform: () => platform, Plugins: plugins };
+  }, { platform, phoneScale, androidScale, announceNever });
+}
+
+const rootPx = (page) => page.evaluate(() => parseFloat(getComputedStyle(document.documentElement).fontSize));
+
+test("22.5: a new install follows the phone's text size; in a browser the choice is called 'Same as my browser'", async ({ page }) => {
+  await openApp(page);
+  await expect(page.locator("#a11yTextSize")).toHaveValue("system");
+  await expect(page.locator('#a11yTextSize option[value="system"]')).toHaveText("Same as my browser");
+  expect(await rootPx(page)).toBeCloseTo(18, 1);
+});
+
+test("22.5: on an iPhone set to larger text, the app is larger too, and the large-text layout turns on", async ({ page }) => {
+  await stubShell(page, "ios", { phoneScale: 1.5 });
+  await openApp(page);
+  await expect(page.locator('#a11yTextSize option[value="system"]')).toHaveText("Same as my phone");
+  expect(await rootPx(page)).toBeCloseTo(27, 1);
+  expect(await page.evaluate(() => document.body.classList.contains("large-text-layout"))).toBe(true);
+  // A size picked in the app wins over the phone's.
+  await page.evaluate(() => { const s = document.getElementById("a11yTextSize"); s.value = "default"; s.dispatchEvent(new Event("change")); });
+  expect(await rootPx(page)).toBeCloseTo(18, 1);
+  expect(await page.evaluate(() => localStorage.getItem("om-a11y-text-size"))).toBe("default");
+});
+
+test("22.5: on Android the app asks the phone for its font size", async ({ page }) => {
+  await stubShell(page, "android", { androidScale: 2 });
+  await openApp(page);
+  await page.waitForFunction(() => parseFloat(getComputedStyle(document.documentElement).fontSize) > 30);
+  expect(await rootPx(page)).toBeCloseTo(36, 1);
+});
+
+test("22.5: a size chosen before build 27 is kept", async ({ page }) => {
+  await openApp(page, { storage: { "om-a11y-text-size": "xl" } });
+  await expect(page.locator("#a11yTextSize")).toHaveValue("xl");
+  expect(await rootPx(page)).toBeCloseTo(36, 1);
+});
+
+test("22.5: High contrast follows the phone's Increase Contrast until the student sets it", async ({ page }) => {
+  await page.emulateMedia({ contrast: "more" });
+  await openApp(page);
+  expect(await page.evaluate(() => document.body.classList.contains("high-contrast"))).toBe(true);
+  await expect(page.locator("#a11yHighContrast")).toBeChecked();
+  await page.emulateMedia({ contrast: "no-preference" });
+  await expect.poll(() => page.evaluate(() => document.body.classList.contains("high-contrast"))).toBe(false);
+  // Once set in the app, the phone no longer changes it.
+  await page.evaluate(() => { const b = document.getElementById("a11yHighContrast"); b.checked = true; b.dispatchEvent(new Event("change")); });
+  await page.emulateMedia({ contrast: "no-preference" });
+  expect(await page.evaluate(() => document.body.classList.contains("high-contrast"))).toBe(true);
+});
+
+/* ---------------- Sharon, Nov 17: never stall waiting for VoiceOver ---------------- */
+
+test("VoiceOver that never says it has finished: the app moves on after a few seconds, not 16", async ({ page }) => {
+  await stubShell(page, "ios", { announceNever: true });
+  await openApp(page);
+  const ms = await page.evaluate(() => new Promise((resolve) => {
+    const t0 = performance.now();
+    gsScreenReaderSay("Get ready.", { onDone: () => resolve(performance.now() - t0) });
+  }));
+  expect(ms).toBeGreaterThan(3500);
+  expect(ms).toBeLessThan(6000);
+});

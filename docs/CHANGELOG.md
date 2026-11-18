@@ -8,10 +8,11 @@ than commit history. They are accurate to the day.
 
 ---
 
-## 2026-11-17 (build 27) — results in words: for every activity, or on each activity page
+## 2026-11-18 (build 27) — results in words where you want them, and the app follows the phone's text size
 
 From Cindi Lashinsky's bug tracker (feature request F12, her decision by email
-on 15 November).
+on 15 November; item 22.5) and from tester Sharon Zenger's feedback (16–17
+November).
 
 - **Results in words, per activity (F12).** "Announce results and describe the
   sounds" was one switch for the whole app. Below it, Accessibility now has
@@ -22,8 +23,30 @@ on 15 November).
   and each student keeps their own, like the other accessibility settings.
   Choosing a verbosity level resets every page to that level. With the choice
   made on each page, the switch in Accessibility is greyed out.
-- **Tests.** 6 new tests (`build27-results-words.spec.mjs`). Playwright: 315
-  passed, 1 skipped.
+- **The app follows the phone's text size (22.5).** Text size has a new first
+  choice, **Same as my phone** (in a browser, **Same as my browser**), and it is
+  the default for anyone who has not picked a size. On an iPhone it follows
+  Dynamic Type (the size chosen in iOS Settings); on Android, the phone's Font
+  size (the shell now reports it, and the web view no longer scales text a
+  second time); in a browser, the browser's default size. A size picked in the
+  app still wins, and sizes picked before build 27 are kept. Checked in the
+  iPhone 14 Pro Max simulator (standard text: unchanged; iOS "Accessibility
+  Extra Large": 2.35 times larger, with the large-text layout) and on the
+  Android 16 emulator (Font size 150%: 1.5 times larger; a change while the app
+  is open is followed). Sharon Zenger (tester) said phone users expect this and
+  that the app's own text size should stay, which it does.
+- **High contrast follows the phone (22.5).** Until it is set in the app, High
+  contrast is on when the phone's Increase Contrast is on.
+- **Never stuck waiting for VoiceOver or TalkBack.** When the app hands words to
+  the screen reader and waits for them to end, it now moves on after a few
+  seconds (at least 4) if the screen reader never reports the end; it used to
+  wait up to 16 seconds, which can look like a press that did nothing (Sharon
+  Zenger, iPhone, 17 Nov).
+- **A test fixed.** A comparison test sometimes answered "longer" to an "about
+  the same" sample that was slightly longer, which builds 24 and later count as
+  right; it now picks an answer the app never accepts.
+- **Tests.** 12 new tests (`build27-results-words.spec.mjs`). Playwright: 321
+  passed, 1 skipped. Simulator end-to-end on Cindi's 14 Pro Max: 168/168.
 
 ## 2026-11-15 (build 26) — your own Siri phrase, setup links in the installed app, and the last privacy texts
 

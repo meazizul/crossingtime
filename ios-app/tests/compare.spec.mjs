@@ -132,7 +132,13 @@ test("a wrong answer: result sound and shape at once, then the judgment replay, 
   await openCompare(page, { "om-a11y-output-mode": "audio-visual", "om-a11y-sync-visual-replay": "true" });
   await playUntilAnswering(page);
   const expected = await page.evaluate(() => gsCompareState.expected);
-  const wrong = expected === "longer" ? "shorter" : "longer";
+  // An answer the app counts as wrong. Since build 24 the true direction is
+  // also right inside the "about the same" range, so for a "same" sample
+  // "longer" can be right; pick one that is never accepted.
+  const wrong = await page.evaluate(() => {
+    const accepted = gsAcceptedAnswers(gsCompareState.intervalSec, gsCompareState.crossingSec, gsCompareState.rangeSec);
+    return ["longer", "shorter", "same"].find((a) => !accepted.includes(a));
+  });
   await answerOn(page, wrong);
 
   // The triangle shows with the sound, before any replay.

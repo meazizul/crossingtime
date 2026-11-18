@@ -493,7 +493,14 @@ than in a browser, and the note under the button always states which is active.
 ### Vision preferences
 - **Theme** — System / Light / Dark / Inverted (yellow on black, for some
   low-vision conditions).
-- **Text size** — up to **300%**, at which point the layout reflows to single
+- **Text size** — **Same as my phone** (the default since build 27) follows
+  the text size chosen in the phone's own settings: Dynamic Type on an iPhone
+  (Settings, Accessibility, Display & Text Size, Larger Text) and Font size on
+  Android. In a browser it reads **Same as my browser** and follows the
+  browser's default font size. It is checked again whenever the app comes back
+  from the background. Choosing any other size keeps that size, whatever the
+  phone says; a size chosen before build 27 is kept. Sizes go up to **300%**,
+  at which point the layout reflows to single
   columns so nothing is clipped. On the answer screens the question and the
   instructions are shown as large as the pad can hold on one screen, never
   larger than your size, so the pad never scrolls and nothing is cut off
@@ -504,7 +511,9 @@ than in a browser, and the note under the button always states which is active.
   press and hold is never an answer. With buttons only, the pad scrolls up
   and down and its buttons follow your size.
 - **High contrast** — all gradients flattened. With the Light theme it is black
-  on white; with Dark or Inverted it stays white (or yellow) on black.
+  on white; with Dark or Inverted it stays white (or yellow) on black. Until it
+  is set in the app it follows the phone: on when Increase Contrast (iPhone) or
+  a high-contrast setting the browser reports is on (build 27).
 - **Pinch zoom** works in the web app and, since build 13, in the iPhone and
   Android apps too. Double-tap zoom is off so a fast tap never zooms.
 - **Focus boost** — thicker focus outlines for keyboard and switch users.

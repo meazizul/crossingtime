@@ -60,6 +60,14 @@ public class GSAndroidPlugin extends Plugin {
     @Override
     public void load() {
         super.load();
+        // Build 27 (tracker 22.5): the page applies the phone's font size
+        // itself ("Same as my phone"), so the web view must not scale the
+        // text a second time.
+        try {
+            getActivity().runOnUiThread(() -> {
+                try { getBridge().getWebView().getSettings().setTextZoom(100); } catch (Exception ignored) { }
+            });
+        } catch (Exception ignored) { }
         try {
             tts = new TextToSpeech(getContext(), status -> {
                 if (status == TextToSpeech.SUCCESS && tts != null) {
@@ -211,6 +219,19 @@ public class GSAndroidPlugin extends Plugin {
             controller.setAppearanceLightNavigationBars(lightBackground);
         });
         call.resolve();
+    }
+
+    /*
+     * textScale (build 27, tracker 22.5): the phone's font size, as a scale
+     * (1.0 is standard). The page uses it for "Same as my phone" in its own
+     * text size setting, so the app follows the size chosen in Android
+     * settings by default.
+     */
+    @PluginMethod
+    public void textScale(PluginCall call) {
+        com.getcapacitor.JSObject result = new com.getcapacitor.JSObject();
+        result.put("scale", (double) getContext().getResources().getConfiguration().fontScale);
+        call.resolve(result);
     }
 
     @PluginMethod
