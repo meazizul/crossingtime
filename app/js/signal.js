@@ -295,7 +295,7 @@ function gsSignalResolve(producedSec) {
 /* "Ready for another.", after the replay in words when those are on. */
 function gsSignalFinishStatus() {
   const message = "Ready for another.";
-  const said = Boolean(gsSignalState.lastDescribe) && a11ySettings.describeSounds && gsDescribe(`${gsSignalState.lastDescribe} ${message}`);
+  const said = Boolean(gsSignalState.lastDescribe) && gsDescribeOn() && gsDescribe(`${gsSignalState.lastDescribe} ${message}`);
   // Off (Low): the verdict still shows and is read, in short (tracker 20.2).
   const verdict = !said && gsSignalState.lastVerdict ? `${gsSignalState.lastVerdict} ` : "";
   gsSignalStatus(`${verdict}${message}`, "neutral", { announce: !said });

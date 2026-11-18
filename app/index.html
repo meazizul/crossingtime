@@ -174,6 +174,7 @@
     <!-- ================= PRACTICE ================= -->
     <section id="screen-practice" class="screen" aria-labelledby="screenTitle" hidden>
       <p class="screen-intro">Develop an accurate sense of your crossing times through practice and feedback.</p>
+      <label class="results-words-switch" hidden><input type="checkbox" data-results-words="practice" /> Announce results and describe the sounds</label>
       <p class="demo-note" hidden>Using example times. Your instructor sets your real crossing times.</p>
 
     <section class="card" aria-labelledby="modeCardLabel">
@@ -232,6 +233,7 @@
     <!-- ================= COMPARISON PREPARATION (internal name: signal) ================= -->
     <section id="screen-signal" class="screen" aria-labelledby="screenTitle" hidden>
       <p class="screen-intro">Get ready to compare your time to various sample times. Press Ready. When the sound starts, it is like hearing a vehicle. Stop it when you think you would finish crossing. Then you hear it again: the sound, your press, and the chime or the low pulse where your crossing time ends.</p>
+      <label class="results-words-switch" hidden><input type="checkbox" data-results-words="signal" /> Announce results and describe the sounds</label>
 
       <section class="card" aria-labelledby="signalStreetLabel">
         <fieldset class="option-group">
@@ -273,6 +275,7 @@
     <!-- ================= COMPARISON PRACTICE (internal name: compare) ================= -->
     <section id="screen-compare" class="screen" aria-labelledby="screenTitle" hidden>
       <p class="screen-intro">The app plays a sample warning time: the time from first detecting a vehicle until it passes in front of you. Is it longer, shorter, or about the same as your crossing time? After you answer, the sample plays again, with <span data-own-sound>your own sound</span> where your crossing time ends.</p>
+      <label class="results-words-switch" hidden><input type="checkbox" data-results-words="compare" /> Announce results and describe the sounds</label>
 
       <section class="card" aria-labelledby="compareStreetLabel">
         <fieldset class="option-group">
@@ -325,6 +328,7 @@
     <!-- ================= AT THE STREET (internal name: live) ================= -->
     <section id="screen-live" class="screen" aria-labelledby="screenTitle" hidden>
       <p class="screen-intro">Position yourself as directed by your O&amp;M Specialist, so you can look or listen for approaching vehicles. Swipe left or right the moment you think you detect (see or hear) a vehicle, in the direction it is coming from. Then tap when it passes in front of you. After you answer, that warning time plays again as a sound, with <span data-own-sound>your own sound</span> where your crossing time ends.</p>
+      <label class="results-words-switch" hidden><input type="checkbox" data-results-words="live" /> Announce results and describe the sounds</label>
 
       <section class="card" data-feature-choice="liveSense" aria-labelledby="liveSenseLabel">
         <fieldset class="option-group">
@@ -977,6 +981,12 @@
             Announce results and describe the sounds
           </label>
           <p class="setup-note">After the right-or-wrong sound and after each replay, the app says what the sounds were, for example "Correct." or "That was your taps, then the crossing time: within the margin." Never a number of seconds. With VoiceOver or TalkBack on, the screen reader says them. When this is off, the result is still shown and read out in its short form.</p>
+          <label for="a11yDescribeWhere">Choose this</label>
+          <select id="a11yDescribeWhere">
+            <option value="all">Here, for every activity</option>
+            <option value="each">On each activity page</option>
+          </select>
+          <p class="setup-note" id="a11yDescribeWhereNote">Here: the switch above applies to every activity. On each activity page: each activity has its own switch, just below its introduction, so the student can have results in words in one activity and not in another.</p>
           <label for="a11ySpeechRate">Speaking rate</label>
           <select id="a11ySpeechRate">
             <option value="0.8">Slower</option>
@@ -1004,6 +1014,7 @@
           </select>
           <label for="a11yTextSize">Text size</label>
           <select id="a11yTextSize">
+            <option value="system">Same as my phone</option>
             <option value="smaller">Smaller</option>
             <option value="default">Default</option>
             <option value="large">Large (115%)</option>

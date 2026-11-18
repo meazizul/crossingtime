@@ -51,6 +51,7 @@
     const a11ySayReplay = document.getElementById("a11ySayReplay");
     const a11yVerbosity = document.getElementById("a11yVerbosity");
     const a11yDescribeSounds = document.getElementById("a11yDescribeSounds");
+    const a11yDescribeWhere = document.getElementById("a11yDescribeWhere");
     const a11ySpeechRate = document.getElementById("a11ySpeechRate");
     const soundTestBtn = document.getElementById("soundTestBtn");
     const soundTestNote = document.getElementById("soundTestNote");
@@ -157,6 +158,10 @@
 
     const prefersDarkScheme = window.matchMedia("(prefers-color-scheme: dark)");
     const prefersReducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
+    // Build 27 (tracker 22.5): the phone's own settings. Increase Contrast
+    // (iPhone) or high-contrast text reaches the page as prefers-contrast.
+    const prefersMoreContrast = window.matchMedia("(prefers-contrast: more)");
+    let gsPhoneTextScale = 1;
 
     const VISUAL_PULSE_SEC = 0.2;
     const VISUAL_REPLAY_PRE_DELAY_SEC = 0.5; // screen stays normal this long before going black
@@ -192,7 +197,10 @@
       outsideVisualVariant: "up",
       userFlashContrast: "soft",
       theme: "system",
-      textSize: "default",
+      // Build 27 (tracker 22.5): follow the phone's text size until the
+      // student picks a size in Accessibility.
+      textSize: "system",
+      highContrastFollowsPhone: true,
       highContrast: false,
       focusBoost: false,
       announceCues: true,
@@ -206,6 +214,10 @@
       // not a screen reader is running. Never a number of seconds.
       sayReplay: true,
       describeSounds: true,
+      // Build 27 (tracker F12, Cindi 15 Nov 2026): "all" = the switch in
+      // Accessibility applies to every activity; "each" = every activity page
+      // has its own switch (om-a11y-describe-<activity>).
+      describeWhere: "all",
       verbosity: "medium",
       speechRate: 1
     };
@@ -399,7 +411,7 @@
       const viewportWidth = window.visualViewport?.width ?? window.innerWidth;
       const viewportHeight = window.visualViewport?.height ?? window.innerHeight;
       const coarsePointer = window.matchMedia("(any-pointer: coarse)").matches || navigator.maxTouchPoints > 0;
-      const largeTextLayout = ["largest", "huge", "xl", "xxl", "max"].includes(a11ySettings.textSize);
+      const largeTextLayout = gsEffectiveTextScale() >= 1.3 - 1e-6;
       const phoneSafeLayout = coarsePointer || viewportWidth <= 430 || viewportHeight <= 500 || largeTextLayout;
       document.body.classList.toggle("phone-safe-layout", phoneSafeLayout);
       document.body.classList.toggle("short-screen-layout", viewportHeight <= 500);
@@ -1801,6 +1813,56 @@
       return 1;
     }
 
+    /* Build 27 (tracker 22.5, Sharon Zenger and Cindi, Nov 2026): "Same as my
+     * phone" follows the text size chosen in the phone's own settings. iPhone:
+     * Dynamic Type, read from the system body font (17 px at the standard
+     * size). Android: the phone's font size, from the shell. A browser: its
+     * default font size (16 px standard). */
+    function gsMeasurePhoneTextScale() {
+      if (typeof window.__gsPhoneTextScale === "number") {
+        gsPhoneTextScale = window.__gsPhoneTextScale;
+        return;
+      }
+      if (nativePlatform === "android") return;   // set by gsReadAndroidTextScale
+      try {
+        const probe = document.createElement("span");
+        probe.setAttribute("aria-hidden", "true");
+        probe.style.cssText = "position:absolute;visibility:hidden;pointer-events:none;left:-9999px;";
+        let base = 16;
+        if (nativePlatform === "ios") {
+          probe.style.font = "-apple-system-body";
+          base = 17;
+          if (!probe.style.font) { gsPhoneTextScale = 1; return; }
+        } else {
+          probe.style.fontSize = "medium";
+        }
+        document.body.appendChild(probe);
+        const px = parseFloat(getComputedStyle(probe).fontSize) || base;
+        probe.remove();
+        gsPhoneTextScale = px / base;
+      } catch (error) {
+        gsPhoneTextScale = 1;
+      }
+    }
+
+    function gsReadAndroidTextScale() {
+      const android = nativePlatform === "android" ? CapacitorGlobal?.Plugins?.GSAndroid : null;
+      if (!android || typeof android.textScale !== "function") return;
+      try {
+        Promise.resolve(android.textScale()).then((result) => {
+          const scale = Number(result?.scale);
+          if (!Number.isFinite(scale) || scale <= 0 || Math.abs(scale - gsPhoneTextScale) < 0.001) return;
+          gsPhoneTextScale = scale;
+          if (a11ySettings.textSize === "system") applyA11ySettings();
+        }).catch(() => {});
+      } catch (error) { /* older shell: standard size */ }
+    }
+
+    function gsEffectiveTextScale() {
+      if (a11ySettings.textSize !== "system") return getTextSizeScale(a11ySettings.textSize);
+      return Math.min(3, Math.max(0.85, gsPhoneTextScale || 1));
+    }
+
     function validateSetup() {
       if (!requireTimingInputs()) return false;
       const problem = gsSetupProblem();
@@ -2425,17 +2487,21 @@
       let finished = false;
       const done = () => { if (finished) return; finished = true; if (typeof onDone === "function") onDone(); };
       if (!text || document.hidden) { if (onDone) setTimeout(done, 0); return; }
+      const estimateMs = gsScreenReaderWaitSec(text) * 1000;
+      // Build 27: if the screen reader never says it has finished (it can
+      // drop an announcement while it is reading something else), move on
+      // after a few seconds instead of up to 16, which looked like a press
+      // that did nothing (Sharon Zenger, iPhone, Nov 2026).
+      const capMs = Math.max(4000, estimateMs * 2 + 1000);
       const plugin = nativePlatform === "ios" ? GSNativePlugin : null;
       if (plugin && typeof plugin.announce === "function") {
         try {
-          Promise.resolve(plugin.announce({ text })).then(done, done);
-          // Never stuck: the shell has its own timeout too.
-          setTimeout(done, 16000);
+          Promise.resolve(plugin.announce({ text, timeoutSec: capMs / 1000 })).then(done, done);
+          setTimeout(done, capMs + 500);   // never stuck, even if the shell is
           return;
         } catch (error) { /* fall through to the live region */ }
       }
       announceScreenReader(text, { force: true, speak: false });
-      const estimateMs = gsScreenReaderWaitSec(text) * 1000;
       // Build 25 (tracker 22.8): Android does not say when TalkBack has
       // finished, but it does say when its voice is playing. The shell waits
       // for TalkBack's voice to start and then to go quiet; if it never
@@ -2449,7 +2515,7 @@
           // report it, so never wait longer than build 24 did.
           Promise.resolve(android.waitForSpeech({ startWithinMs: Math.min(2500, estimateMs), quietMs: 450, maxMs: Math.max(8000, estimateMs * 3) }))
             .then((result) => { if (result && result.heard) done(); else rest(); }, rest);
-          setTimeout(done, Math.max(16000, estimateMs * 3));   // never stuck
+          setTimeout(done, Math.max(8000, estimateMs * 3) + 500);   // never stuck
           return;
         } catch (error) { /* older shell: the estimate */ }
       }
@@ -2497,12 +2563,41 @@
       return GS_REPLAY_INTRO_SEC;
     }
 
+    /* Build 27 (tracker F12): whether results are said in words in the
+     * activity on screen. With "On each activity page", each activity keeps
+     * its own choice; one not yet set follows the switch in Accessibility. */
+    const GS_RESULTS_WORDS_ACTIVITIES = ["practice", "signal", "compare", "live"];
+    function gsVisibleActivity() {
+      return GS_RESULTS_WORDS_ACTIVITIES.find((name) => {
+        const el = document.getElementById(`screen-${name}`);
+        return el && !el.hidden;
+      }) || null;
+    }
+    function gsDescribeOn(activity = gsVisibleActivity()) {
+      if (a11ySettings.describeWhere !== "each" || !activity) return a11ySettings.describeSounds;
+      const own = localStorage.getItem(`om-a11y-describe-${activity}`);
+      return own === null ? a11ySettings.describeSounds : own === "true";
+    }
+    function gsRenderResultsWordsSwitches() {
+      const each = a11ySettings.describeWhere === "each";
+      document.querySelectorAll("[data-results-words]").forEach((box) => {
+        const wrap = box.closest(".results-words-switch");
+        if (wrap) wrap.hidden = !each;
+        box.checked = gsDescribeOn(box.dataset.resultsWords);
+      });
+      const global = document.getElementById("a11yDescribeSounds");
+      if (global) {
+        global.disabled = each;
+        global.closest("label")?.classList.toggle("is-disabled", each);
+      }
+    }
+
     /* Speaks a description (or hands it to the screen reader). onDone runs
      * when the words are over and at least minSec have passed. Returns
      * whether anything was said. */
     function gsDescribe(text, { onDone = null, minSec = 0 } = {}) {
       const finish = (afterMs) => { if (onDone) setTimeout(onDone, Math.max(0, afterMs)); };
-      if (!a11ySettings.describeSounds || !text) {
+      if (!gsDescribeOn() || !text) {
         finish(minSec * 1000);
         return false;
       }
@@ -2534,7 +2629,7 @@
     /* The next step of an activity after a description: with nothing to say
      * it is an ordinary (cancellable) timer; after words, the words end it. */
     function gsDescribeThen(timers, text, fn, minSec, show = null) {
-      if (!a11ySettings.describeSounds || !text) {
+      if (!gsDescribeOn() || !text) {
         // Off (Speech: Low): the result is still shown and read in its short
         // form, "Correct." or "Not correct.", as Settings and the App Guide
         // say; only the description of the sounds is left out (tracker 20.2).
@@ -2933,7 +3028,7 @@
         suppressSrAnnouncements = false;
         resetState("Ready for another try.");
         renderPracticeScore();
-        const said = a11ySettings.describeSounds && gsDescribe(`${describe} Ready for another try.`);
+        const said = gsDescribeOn() && gsDescribe(`${describe} Ready for another try.`);
         // Off (Low): the verdict still shows and is read, in short (20.2).
         const shortVerdict = marks.length > 1 ? verdicts.join(", ") : gsVerdictWords(marks[0]?.feedbackType === "acceptable");
         const short = said ? "" : `${shortVerdict.replace(/^./, (c) => c.toUpperCase())}. Ready for another try.`;
@@ -3020,7 +3115,9 @@
     /* ---------------- Settings application ---------------- */
     function applyA11ySettings() {
       document.body.dataset.textSize = a11ySettings.textSize;
-      document.documentElement.style.fontSize = `${18 * getTextSizeScale(a11ySettings.textSize)}px`;
+      if (a11ySettings.textSize === "system") gsMeasurePhoneTextScale();
+      const textScale = gsEffectiveTextScale();
+      document.documentElement.style.fontSize = `${18 * textScale}px`;
       cueBannerText.classList.toggle("sr-only", !a11ySettings.useTextLabels);
       document.body.classList.toggle("high-contrast", a11ySettings.highContrast);
       document.body.classList.toggle("focus-boost", a11ySettings.focusBoost);
@@ -3028,7 +3125,7 @@
         ? (prefersDarkScheme.matches ? "dark" : "light")
         : a11ySettings.theme;
       document.body.dataset.theme = resolvedTheme;
-      textSizeLandscapeHint.hidden = !["huge", "xl", "xxl", "max"].includes(a11ySettings.textSize);
+      textSizeLandscapeHint.hidden = !(textScale >= 1.5 - 1e-6);
       textSizeLandscapeHint.textContent = textSizeLandscapeHint.hidden
         ? ""
         : "At this size, portrait orientation keeps every control reachable.";
@@ -3124,13 +3221,20 @@
       if (storedUseTextLabels) a11ySettings.useTextLabels = storedUseTextLabels === "true";
       if (storedTheme) a11ySettings.theme = storedTheme;
       if (storedTextSize) a11ySettings.textSize = storedTextSize;
-      if (storedHighContrast) a11ySettings.highContrast = storedHighContrast === "true";
+      if (storedHighContrast) {
+        a11ySettings.highContrast = storedHighContrast === "true";
+        a11ySettings.highContrastFollowsPhone = false;
+      } else {
+        a11ySettings.highContrast = prefersMoreContrast.matches;
+        a11ySettings.highContrastFollowsPhone = true;
+      }
       if (storedFocusBoost) a11ySettings.focusBoost = storedFocusBoost === "true";
       if (storedAnnounceCues) a11ySettings.announceCues = storedAnnounceCues === "true";
       if (storedSelfVoice) a11ySettings.selfVoice = storedSelfVoice === "true";
       if ([0.8, 1, 1.25].includes(storedSpeechRate)) a11ySettings.speechRate = storedSpeechRate;
       if (storedSayReplay) a11ySettings.sayReplay = storedSayReplay === "true";
       if (storedDescribeSounds) a11ySettings.describeSounds = storedDescribeSounds === "true";
+      a11ySettings.describeWhere = localStorage.getItem("om-a11y-describe-where") === "each" ? "each" : "all";
       const storedVerbosity = localStorage.getItem("om-a11y-verbosity");
       if (["high", "medium", "low"].includes(storedVerbosity)) a11ySettings.verbosity = storedVerbosity;
       // No switch since build 20 (Cindi, 1 Nov 2026): the on-screen replay
@@ -3163,6 +3267,8 @@
       if (a11ySpeechRate) a11ySpeechRate.value = String(a11ySettings.speechRate);
       if (a11ySayReplay) a11ySayReplay.checked = a11ySettings.sayReplay;
       if (a11yDescribeSounds) a11yDescribeSounds.checked = a11ySettings.describeSounds;
+      if (a11yDescribeWhere) a11yDescribeWhere.value = a11ySettings.describeWhere;
+      gsRenderResultsWordsSwitches();
       if (a11yVerbosity) a11yVerbosity.value = a11ySettings.verbosity;
       applyA11ySettings();
     }
@@ -3383,6 +3489,7 @@
 
     a11yHighContrast.addEventListener("change", () => {
       a11ySettings.highContrast = a11yHighContrast.checked;
+      a11ySettings.highContrastFollowsPhone = false;
       localStorage.setItem("om-a11y-high-contrast", String(a11ySettings.highContrast));
       applyA11ySettings();
     });
@@ -3432,6 +3539,8 @@
       localStorage.setItem("om-a11y-describe-sounds", String(more));
       if (a11ySayReplay) a11ySayReplay.checked = more;
       if (a11yDescribeSounds) a11yDescribeSounds.checked = more;
+      GS_RESULTS_WORDS_ACTIVITIES.forEach((name) => localStorage.removeItem(`om-a11y-describe-${name}`));
+      gsRenderResultsWordsSwitches();
       gsSpeak({ high: "Verbosity high.", medium: "Verbosity medium.", low: "Verbosity low." }[level]);
     });
 
@@ -3444,7 +3553,31 @@
     a11yDescribeSounds?.addEventListener("change", () => {
       a11ySettings.describeSounds = a11yDescribeSounds.checked;
       localStorage.setItem("om-a11y-describe-sounds", String(a11ySettings.describeSounds));
+      gsRenderResultsWordsSwitches();
       if (a11ySettings.describeSounds) gsSpeak("The app will announce results and describe the sounds.");
+    });
+
+    // Build 27 (tracker F12): choose it here for every activity, or on each
+    // activity page. Switching to "each" starts every page from the current
+    // choice, so nothing changes until the student changes a page's switch.
+    a11yDescribeWhere?.addEventListener("change", () => {
+      a11ySettings.describeWhere = a11yDescribeWhere.value === "each" ? "each" : "all";
+      localStorage.setItem("om-a11y-describe-where", a11ySettings.describeWhere);
+      if (a11ySettings.describeWhere === "each") {
+        GS_RESULTS_WORDS_ACTIVITIES.forEach((name) => {
+          localStorage.setItem(`om-a11y-describe-${name}`, String(a11ySettings.describeSounds));
+        });
+      }
+      gsRenderResultsWordsSwitches();
+      announceScreenReader(a11ySettings.describeWhere === "each"
+        ? "Each activity page now has its own switch for announcing results."
+        : "The switch here now applies to every activity.");
+    });
+    document.querySelectorAll("[data-results-words]").forEach((box) => {
+      box.addEventListener("change", () => {
+        localStorage.setItem(`om-a11y-describe-${box.dataset.resultsWords}`, String(box.checked));
+        announceScreenReader(box.checked ? "Results will be announced in words here." : "Results will not be announced in words here.");
+      });
     });
 
     /*
@@ -3511,6 +3644,26 @@
     prefersDarkScheme.addEventListener("change", () => {
       if (a11ySettings.theme === "system") applyA11ySettings();
     });
+
+    // Build 27 (tracker 22.5): the phone's contrast and text size can change
+    // while the app is in the background (the student goes to Settings).
+    prefersMoreContrast.addEventListener?.("change", () => {
+      if (!a11ySettings.highContrastFollowsPhone) return;
+      a11ySettings.highContrast = prefersMoreContrast.matches;
+      if (a11yHighContrast) a11yHighContrast.checked = a11ySettings.highContrast;
+      applyA11ySettings();
+    });
+    document.addEventListener("visibilitychange", () => {
+      if (document.hidden || a11ySettings.textSize !== "system") return;
+      gsReadAndroidTextScale();
+      applyA11ySettings();
+    });
+    gsReadAndroidTextScale();
+    {
+      // In a browser the choice follows the browser's own text size.
+      const followOption = a11yTextSize?.querySelector('option[value="system"]');
+      if (followOption && !isNativeShell) followOption.textContent = "Same as my browser";
+    }
 
     window.addEventListener("hashchange", () => {
       if (!importSharedTimingSettings()) return;

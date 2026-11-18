@@ -1325,7 +1325,7 @@ function gsCompareFinish(message, tone = "neutral", { focus = "play", describe =
   gsCompareState.phase = "idle";
   gsCompareSetStartEnabled(true);
   // The replay in words, then the prompt, as one utterance (build 15).
-  const said = Boolean(describe) && a11ySettings.describeSounds && gsDescribe(`${describe} ${message}`);
+  const said = Boolean(describe) && gsDescribeOn() && gsDescribe(`${describe} ${message}`);
   // Off (Speech: Low): the verdict still shows and is read, in short (20.2).
   const verdict = said ? "" : gsVerdictFromDescribe(describe);
   gsCompareStatus(verdict ? `${verdict} ${message}` : message, tone, { announce: !said });
@@ -1818,7 +1818,7 @@ function gsLiveAnswer(answer) {
   gsDescribeThen(gsLiveTimers, verdict, () => {
     if (gsLiveState.phase !== "judging") return;
     gsLiveAfterVehicle({ judged: true, correct });
-  }, a11ySettings.describeSounds ? 0 : 1.0, (short) => gsLiveStatus(short, "neutral", { announce: false }));
+  }, gsDescribeOn("live") ? 0 : 1.0, (short) => gsLiveStatus(short, "neutral", { announce: false }));
 }
 
 /*
@@ -1988,7 +1988,7 @@ function gsLiveReady({ describe = "" } = {}) {
   gsLiveRenderPad();
   const message = "Ready for the next vehicle.";
   // The replay in words, then the prompt, as one utterance (build 15).
-  const said = Boolean(describe) && a11ySettings.describeSounds && gsDescribe(`${describe} ${message}`);
+  const said = Boolean(describe) && gsDescribeOn() && gsDescribe(`${describe} ${message}`);
   // Off (Speech: Low): the verdict still shows and is read, in short (20.2).
   const verdict = said ? "" : gsVerdictFromDescribe(describe);
   gsLiveStatus(verdict ? `${verdict} ${message}` : message, "neutral", { announce: !said });
