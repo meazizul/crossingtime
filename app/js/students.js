@@ -169,8 +169,166 @@ function gsNewStudentId() {
 }
 
 /* Write the durable copy now, then start the app again with the new data. */
+/*
+ * Two browser tabs on one phone (tracker 27.5). Each tab holds one student's
+ * practice in memory; a switch in one tab rewrites the shared storage under
+ * the other. A try finished in the stale tab used to be saved into the
+ * newly selected student's history. Now each tab remembers which student it
+ * started with: a tab that sees another tab switch student starts again on
+ * that student, and a try is never saved under a different student from the
+ * one the tab was showing.
+ */
+function gsActiveStudentIdNow() {
+  try {
+    const raw = JSON.parse(localStorage.getItem(GS_STUDENTS_KEY) || "null");
+    return raw && raw.active ? String(raw.active) : "";
+  } catch (error) {
+    return "";
+  }
+}
+
+const gsTabStudentId = gsActiveStudentIdNow();
+let gsTabStudentReloading = false;
+
+function gsStudentChangedElsewhere() {
+  return gsActiveStudentIdNow() !== gsTabStudentId;
+}
+
+function gsStudentMismatchReload(message) {
+  if (gsTabStudentReloading) return;
+  gsTabStudentReloading = true;
+  try {
+    sessionStorage.setItem("gs-students-note", message);
+    sessionStorage.setItem("gs-students-note-where", "home");
+  } catch (error) { /* ignore */ }
+  if (typeof window.__gsStudentsReload === "function") window.__gsStudentsReload();
+  else window.location.reload();
+}
+
+/* For gsLogAttempt and gsLogHowMuch: false when the try must not be saved. */
+function gsStudentStillThisTabs() {
+  if (!gsStudentChangedElsewhere()) return true;
+  gsStudentMismatchReload("The student was changed in another tab, so that try was not saved. This tab now shows the student who is selected.");
+  return false;
+}
+
+window.addEventListener("storage", (event) => {
+  // Fires only in the other tabs. key is null when storage was cleared.
+  if (event.key !== null && event.key !== GS_STUDENTS_KEY) return;
+  if (gsStudentChangedElsewhere()) {
+    gsStudentMismatchReload("The student was changed in another tab. This tab now shows the student who is selected.");
+  }
+});
+
+/*
+ * Build 28 (tracker 27.38): where a waiting student's practice history is.
+ *
+ * Until now it sat inside om-students with the rest of that student's data,
+ * so one stored value held every waiting student's whole history. Now it is
+ * that student's own record (gsStore.saveStudentHistory: a file on the
+ * phone, an entry in the browser's database), and the student's data in
+ * om-students carries only the mark below. The history is in the web view's
+ * storage only while its student is the one in use.
+ *
+ *   put away   after a switch, an add or a start: every waiting student's
+ *              history still inside om-students is written to its record,
+ *              read back, and only then taken out of om-students.
+ *   bring in   before a switch to a student: the record is read and put
+ *              back inside om-students, so the switch itself is the same
+ *              all-or-nothing step as before. If the record cannot be read,
+ *              the switch is refused and nothing changes: a student is
+ *              never opened with an empty history in place of a real one.
+ *
+ * Nothing is ever taken out of om-students before its record has been
+ * written and read back, and no record is deleted before its history is
+ * safely back inside om-students.
+ */
+const GS_HISTORY_IN_RECORD = "gs-history-record";      // not an om- key: never applied to the student in use
+const GS_STUDENT_HISTORY_KEY = "om-attempt-log";
+const GS_STUDENT_RECORD_UNREADABLE = "This phone could not read that student's practice history just now, so nothing was changed. Close the app, open it again and try once more.";
+
+function gsStudentRecords() {
+  const store = window.gsStore;
+  return store && typeof store.saveStudentHistory === "function" && store.canKeepStudentRecords?.() ? store : null;
+}
+
+/* Before switching to student `id`. Resolves { ok } or { ok: false, message }. */
+async function gsStudentsBringIn(id) {
+  const first = gsStudentsLoad();
+  if (!first || !first.data[id] || first.data[id][GS_HISTORY_IN_RECORD] !== "1") return { ok: true };
+  const store = gsStudentRecords();
+  let json = null;
+  try { json = store ? await store.loadStudentHistory(id) : null; } catch (error) { json = null; }
+  let valid = false;
+  try { valid = typeof json === "string" && Array.isArray(JSON.parse(json)); } catch (error) { valid = false; }
+  if (!valid) return { ok: false, message: GS_STUDENT_RECORD_UNREADABLE };
+  // Read again: the wait above let other code run.
+  const registry = gsStudentsLoad();
+  const data = registry?.data?.[id];
+  if (!data) return { ok: false, message: GS_STUDENT_RECORD_UNREADABLE };
+  if (data[GS_HISTORY_IN_RECORD] !== "1") return { ok: true };
+  data[GS_STUDENT_HISTORY_KEY] = json;
+  delete data[GS_HISTORY_IN_RECORD];
+  try {
+    gsStudentsSave(registry);
+  } catch (error) {
+    return { ok: false, message: GS_STUDENTS_FULL };
+  }
+  // The history is back inside om-students; its record is now only an old
+  // copy, and is removed so deleted practice cannot linger there.
+  try { await store.deleteStudentHistory(id); } catch (error) { /* replaced the next time this student waits */ }
+  return { ok: true };
+}
+
+/* Move every waiting student's history out of om-students into its own
+ * record. Resolves to how many were moved. Never throws. */
+async function gsStudentsPutAway() {
+  const store = gsStudentRecords();
+  if (!store) return 0;
+  let moved = 0;
+  const start = gsStudentsLoad();
+  if (!start) return 0;
+  for (const entry of start.list) {
+    if (entry.id === start.active) continue;
+    const json = start.data[entry.id]?.[GS_STUDENT_HISTORY_KEY];
+    const marked = start.data[entry.id]?.[GS_HISTORY_IN_RECORD] === "1";
+    if (typeof json !== "string" || json === "[]" || json === "") {
+      // Nothing to keep. An old record (practice since deleted) goes too.
+      if (!marked) { try { await store.deleteStudentHistory(entry.id); } catch (error) { /* ignore */ } }
+      continue;
+    }
+    try {
+      await store.saveStudentHistory(entry.id, json);       // written and read back
+    } catch (error) {
+      continue;                                             // stays inside om-students, as before
+    }
+    // Only if nothing changed meanwhile: same student still waiting, same history.
+    const now = gsStudentsLoad();
+    const data = now?.data?.[entry.id];
+    if (!now || now.active === entry.id || !data || data[GS_STUDENT_HISTORY_KEY] !== json) continue;
+    delete data[GS_STUDENT_HISTORY_KEY];
+    data[GS_HISTORY_IN_RECORD] = "1";
+    try {
+      gsStudentsSave(now);
+      moved += 1;
+    } catch (error) { /* unchanged: still inside om-students */ }
+  }
+  return moved;
+}
+
+/* At start: histories left inside om-students by an earlier build, or by a
+ * put-away that could not finish, are moved once the restore check is over. */
+(function gsStudentsPutAwayAtStart() {
+  const ready = window.gsStore?.restoreChecked;
+  const run = (restored) => { if (!restored) gsStudentsPutAway().catch(() => {}); };
+  if (ready && typeof ready.then === "function") ready.then(run, () => run(false));
+  else setTimeout(() => run(false), 0);
+})();
+
 async function gsStudentsCommitAndReload(message) {
   try { sessionStorage.setItem("gs-students-note", message || ""); } catch (error) { /* ignore */ }
+  // The student who has just stopped being the one in use (27.38).
+  try { await gsStudentsPutAway(); } catch (error) { /* stays inside om-students */ }
   try {
     if (window.gsStore?.commitNow) await window.gsStore.commitNow();
   } catch (error) { /* the reload still shows the data in localStorage */ }
@@ -211,6 +369,13 @@ function gsStudentsAdd(rawCode, started) {
   }
   const day = /^\d{4}-\d{2}-\d{2}$/.test(started || "") ? started : gsTodayLocal();
   if (!registry) {
+    // Tracker 27.10: with no list yet, the student already on this phone is
+    // not in it, so the check above could not see their code. Two students
+    // with one code would have their reports mixed up.
+    const current = gsStudentCodeClean(localStorage.getItem("om-client-code") || "");
+    if (current && current === code) {
+      return { ok: false, message: `There is already a student ${code} on this phone. Choose a different code.` };
+    }
     // The first time: the practice already on this phone becomes the first
     // student, under the code it already has (it may have none).
     registry = {
@@ -239,6 +404,11 @@ function gsStudentsSwitch(id) {
   if (!registry || id === registry.active) return { ok: false, message: "" };
   const target = registry.list.find((s) => s.id === id);
   if (!target) return { ok: false, message: "" };
+  // Tracker 27.38, a last guard: a student whose history is still in its
+  // record must be brought in first (gsStudentsBringIn). Switching without
+  // it would open the student with an empty history, and the real one
+  // would be overwritten the next time they waited.
+  if (registry.data[id]?.[GS_HISTORY_IN_RECORD] === "1") return { ok: false, message: GS_STUDENT_RECORD_UNREADABLE };
   const nextSnap = registry.data[id] || { "om-client-code": target.code };
   registry.data[registry.active] = gsCaptureStudent();
   delete registry.data[id];
@@ -252,6 +422,11 @@ function gsStudentsRemoveActive() {
   const registry = gsStudentsSynced();
   if (!registry) return null;
   const leaving = registry.list.find((s) => s.id === registry.active);
+  const nextId = registry.list.find((s) => s.id !== registry.active)?.id;
+  // The same guard as in gsStudentsSwitch (27.38).
+  if (nextId && registry.data[nextId]?.[GS_HISTORY_IN_RECORD] === "1") {
+    return { removed: null, next: null, message: GS_STUDENT_RECORD_UNREADABLE };
+  }
   registry.list = registry.list.filter((s) => s.id !== registry.active);
   delete registry.data[registry.active];
   const next = registry.list[0] || null;
@@ -263,6 +438,9 @@ function gsStudentsRemoveActive() {
   }
   // Removing frees space, so it fits; still all or nothing.
   const done = gsStudentsTransaction(next ? registry : null, nextSnap);
+  // Tracker 27.37: the removed student's exported report and CSV files are
+  // not left in the phone's cache.
+  if (done.ok && typeof gsClearExports === "function") gsClearExports().catch(() => {});
   return done.ok ? { removed: leaving, next } : { removed: null, next: null, message: done.message };
 }
 
@@ -285,8 +463,25 @@ function gsStudentsSetStarted(day) {
  *   - otherwise (the student in use has that code, or no code yet, or the
  *     phone has one student): the link is applied as before.
  * Returns true when the app is restarting to do it; the link stays in the
- * address so it is applied after the restart.
+ * address so it is applied after the restart. Returns "refused" when the
+ * link belongs to another student and that student could not be reached:
+ * the caller must then apply nothing (tracker 27.2). False: apply as usual.
  */
+let gsStudentsLinkRefusal = "";
+
+/* A link refused after the caller was already told "restarting": the app is
+ * not restarting after all, so the link is taken out of the address and the
+ * reason is shown here and now. */
+function gsStudentsShowLinkRefusal() {
+  try {
+    sessionStorage.removeItem("gs-students-note");
+    sessionStorage.removeItem("gs-students-note-where");
+  } catch (error) { /* ignore */ }
+  if (typeof clearImportedHash === "function") clearImportedHash();
+  if (typeof setStatus === "function") setStatus(gsStudentsLinkRefusal, "warn");
+  if (typeof announceScreenReader === "function") announceScreenReader(gsStudentsLinkRefusal);
+}
+
 function gsStudentsRouteSetupLink(code) {
   const registry = gsStudentsSynced();
   const clean = gsStudentCodeClean(code);
@@ -295,6 +490,20 @@ function gsStudentsRouteSetupLink(code) {
   const owner = gsStudentsOwnerOf(clean, registry);
   let result = null;
   let message = "";
+  if (owner && registry.data[owner.id]?.[GS_HISTORY_IN_RECORD] === "1") {
+    // Tracker 27.38: that student's history is in its own record and has to
+    // come back first, which takes a moment. The link stays in the address
+    // meanwhile, as it does for the restart; then this runs again.
+    gsStudentsBringIn(owner.id).then((ready) => {
+      if (!ready.ok) {
+        gsStudentsLinkRefusal = `This setup link is for student ${clean}, and this phone could not switch to that student. ${ready.message} Nothing was changed: the student now open keeps their own crossing times.`;
+        gsStudentsShowLinkRefusal();
+        return;
+      }
+      if (gsStudentsRouteSetupLink(code) === "refused") gsStudentsShowLinkRefusal();
+    });
+    return true;
+  }
   if (owner) {
     result = gsStudentsSwitch(owner.id);
     message = `This setup link is for student ${clean}. The app now shows ${clean}'s practice, with the instructor's setup.`;
@@ -305,9 +514,18 @@ function gsStudentsRouteSetupLink(code) {
     return false;
   }
   if (!result.ok) {
-    try { sessionStorage.setItem("gs-students-note", result.message || GS_STUDENTS_FULL); } catch (error) { /* ignore */ }
-    return false;
+    // Tracker 27.2: the phone could not switch to, or add, the student this
+    // link was made for (storage full, for one). Returning false here used
+    // to let the caller apply the link to whoever was open, putting one
+    // student's crossing times, margin and contacts on another. The link is
+    // now refused, nothing is changed, and the reason is said.
+    try { sessionStorage.setItem("gs-students-note-where", "home"); } catch (error) { /* ignore */ }
+    const why = result.message || GS_STUDENTS_FULL;
+    gsStudentsLinkRefusal = `This setup link is for student ${clean}, and this phone could not ${owner ? "switch to" : "add"} that student. ${why} Nothing was changed: the student now open keeps their own crossing times.`;
+    try { sessionStorage.setItem("gs-students-note", gsStudentsLinkRefusal); } catch (error) { /* ignore */ }
+    return "refused";
   }
+  try { sessionStorage.setItem("gs-students-note-where", "home"); } catch (error) { /* ignore */ }
   gsStudentsCommitAndReload(message);
   return true;
 }
@@ -412,7 +630,19 @@ function gsCloseRemoveStudent() {
   if (dialog?.open) dialog.close();
 }
 
-function gsConfirmRemoveStudent() {
+async function gsConfirmRemoveStudent() {
+  // Tracker 27.38: the student who becomes the one in use needs their
+  // history back from its record before the removal.
+  const before = gsStudentsLoad();
+  const nextUp = before ? before.list.find((entry) => entry.id !== before.active) : null;
+  if (nextUp) {
+    const ready = await gsStudentsBringIn(nextUp.id);
+    if (!ready.ok) {
+      const note = document.getElementById("removeStudentNote");
+      if (note) note.textContent = ready.message;
+      return;
+    }
+  }
   const result = gsStudentsRemoveActive();
   if (result && !result.removed) {
     const note = document.getElementById("removeStudentNote");
@@ -421,6 +651,8 @@ function gsConfirmRemoveStudent() {
   }
   gsCloseRemoveStudent();
   if (!result) return;
+  // Any record of the removed student's history goes with them.
+  try { if (result.removed?.id) await gsStudentRecords()?.deleteStudentHistory(result.removed.id); } catch (error) { /* none there */ }
   const gone = gsStudentLabel(result.removed);
   gsStudentsCommitAndReload(result.next
     ? `Student ${gone} removed. The app now shows ${gsStudentLabel(result.next)}'s practice.`
@@ -435,10 +667,17 @@ function gsBindStudents() {
     const cleaned = gsStudentCodeClean(event.target.value);
     if (event.target.value !== cleaned) event.target.value = cleaned;
   });
-  document.getElementById("studentSelect")?.addEventListener("change", (event) => {
+  document.getElementById("studentSelect")?.addEventListener("change", async (event) => {
     const registry = gsStudentsLoad();
     const target = registry?.list.find((s) => s.id === event.target.value);
     if (!target) return;
+    // Tracker 27.38: the student's history comes back from its record first.
+    const ready = await gsStudentsBringIn(target.id);
+    if (!ready.ok) {
+      gsStudentsNote(ready.message);
+      gsRenderStudents();
+      return;
+    }
     const result = gsStudentsSwitch(target.id);
     if (!result.ok) {
       if (result.message) gsStudentsNote(result.message);
@@ -498,11 +737,23 @@ function gsBindStudents() {
     note = sessionStorage.getItem("gs-students-note") || "";
     sessionStorage.removeItem("gs-students-note");
   } catch (error) { /* ignore */ }
+  // Tracker 27.43: where the note is shown. After a setup link the student
+  // stays on Home (it is the student who taps the link, and Instructor
+  // setup may be locked). After a switch, an add or a removal the
+  // instructor is taken back to Instructor setup as before, and the note
+  // is also put in the banner at the top of the screen, which is visible
+  // even when Instructor setup shows only its lock.
+  let noteWhere = "";
+  try {
+    noteWhere = sessionStorage.getItem("gs-students-note-where") || "";
+    sessionStorage.removeItem("gs-students-note-where");
+  } catch (error) { /* ignore */ }
   if (note) {
     window.__gsStudentsAfterReload = note;
     setTimeout(() => {
-      if (typeof gsShowScreen === "function") gsShowScreen("instructor");
+      if (noteWhere !== "home" && typeof gsShowScreen === "function") gsShowScreen("instructor");
       gsStudentsNote(note);
+      if (typeof setStatus === "function") setStatus(note);
     }, 300);
   }
 }

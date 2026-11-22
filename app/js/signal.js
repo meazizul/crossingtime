@@ -207,8 +207,19 @@ function gsSignalPress(atMs) {
   }
 }
 
-function gsSignalFire() {
+function gsSignalFire(clockChecked = false) {
   if (gsSignalState.phase !== "waiting") return;
+  // Tracker 27.41: the student's time is measured from signalAt. If the
+  // audio clock is stopped, the sound would start late while signalAt, the
+  // vibration and the give-up timer ran on time, and the student would be
+  // marked late by that much. So the start waits (1.5 s at most) until the
+  // clock is confirmed running; a press meanwhile is a false start, as
+  // before, and a cancel is honoured by the check above.
+  if (!clockChecked && typeof gsAudioRunning === "function" && !gsAudioRunning()) {
+    const session = gsSignalState.session;
+    gsWhenAudioRunning(() => { if (session === gsSignalState.session) gsSignalFire(true); });
+    return;
+  }
   gsSignalState.phase = "timing";
   gsSignalState.signalAt = performance.now();
   gsSignalUpdateButton();
@@ -324,7 +335,10 @@ function gsSignalPlayAgain() {
  * timed: that attempt is dropped unrecorded. */
 document.addEventListener("visibilitychange", () => {
   if (!document.hidden) return;
-  if (gsSignalState.phase === "waiting" || gsSignalState.phase === "timing") {
+  // Tracker 27.22: "ready" too. The app hidden while "Get ready" was being
+  // said used to go on to the wait and the sound with nobody listening.
+  if (gsSignalState.phase === "ready" || gsSignalState.phase === "waiting" || gsSignalState.phase === "timing") {
+    gsStopSpeech();
     gsSignalCancel();
     gsSignalStatus("The app was hidden, so nothing was recorded. Press Ready to try again.", "warn");
   }

@@ -6,7 +6,7 @@
  *
  * Bump CACHE_VERSION whenever www/ changes, or the old files keep being served.
  */
-const CACHE_VERSION = "gapsense-v28";
+const CACHE_VERSION = "gapsense-v29";
 const PRECACHE = [
   "./",
   "./index.html",
@@ -20,6 +20,23 @@ const PRECACHE = [
   "./js/comparison.js",
   "./js/app.js",
   "./js/store.js",
+  // Build 28: the recorded cues and the list of recorded sentences. The
+  // sentences themselves (voice/*.mp3) are cached as they are fetched.
+  "./sounds/bright/right-a.wav",
+  "./sounds/bright/right-b.wav",
+  "./sounds/bright/wrong-a.wav",
+  "./sounds/bright/wrong-b.wav",
+  "./sounds/bright/marker.wav",
+  "./sounds/bright/confirm.wav",
+  "./sounds/bright/reference.wav",
+  "./sounds/warm/right-a.wav",
+  "./sounds/warm/right-b.wav",
+  "./sounds/warm/wrong-a.wav",
+  "./sounds/warm/wrong-b.wav",
+  "./sounds/warm/marker.wav",
+  "./sounds/warm/confirm.wav",
+  "./sounds/warm/reference.wav",
+  "./voice/manifest.json",
   "./icons/icon-192.png",
   "./icons/icon-512.png",
   "./icons/icon-maskable-512.png",
@@ -99,7 +116,17 @@ self.addEventListener("fetch", (event) => {
       fromCache().then((cached) => { finish(cached); });
     }, NETWORK_WAIT_MS);
     network
-      .then((response) => { clearTimeout(timer); finish(response); })
+      .then((response) => {
+        clearTimeout(timer);
+        // Tracker 27.23: the server answered, but with an error page (500,
+        // 503, a host's "site not found"). The saved copy is better than
+        // that; the error is shown only when there is nothing saved.
+        if (response && !response.ok && response.status !== 304 && response.type !== "opaqueredirect") {
+          fromCache().then((cached) => { if (!finish(cached)) finish(response); });
+          return;
+        }
+        finish(response);
+      })
       .catch(() => {
         clearTimeout(timer);
         fromCache().then((cached) => { if (!finish(cached)) finish(Response.error()); });

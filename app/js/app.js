@@ -31,8 +31,8 @@ let gsCurrentScreen = "home";
  * and CACHE_VERSION (sw.js). In the native app the real bundle values are
  * read from the App plugin and override these. */
 const GS_APP_VERSION = "1.0";
-const GS_APP_BUILD = "27";
-const GS_APP_DATE = "18 November 2026";
+const GS_APP_BUILD = "28";
+const GS_APP_DATE = "22 November 2026";
 
 async function gsRenderAbout() {
   const el = document.getElementById("aboutVersion");
@@ -248,15 +248,23 @@ function gsIsUnlocked() {
   try { return Boolean(localStorage.getItem(GS_UNLOCK_KEY)); } catch (error) { return true; }
 }
 
+/* Returns whether the unlock was saved (tracker 27.7): the lock is read from
+ * storage, so an unlock that could not be written has not happened. */
 function gsSetUnlocked(codeId = "tester") {
+  let saved = false;
   try {
     localStorage.setItem(GS_UNLOCK_KEY, JSON.stringify({ code: codeId, at: new Date().toISOString() }));
-  } catch (error) { /* unlocked for this run anyway */ }
+    saved = Boolean(localStorage.getItem(GS_UNLOCK_KEY));
+  } catch (error) {
+    saved = false;
+  }
+  if (!saved) return false;
   try {
     localStorage.removeItem("om-unlocked");
     localStorage.removeItem("om-lock-seen");
     sessionStorage.removeItem("gs-session-unlocked");
   } catch (error) { /* ignore */ }
+  return true;
 }
 
 function gsLocalTime(parts) {
@@ -282,7 +290,9 @@ async function gsCodeCheck(raw, now = Date.now()) {
   // No 32-bit fallback any more (tracker 20.7): it also accepted other
   // inputs that shared its short hash. Every place the app runs (the iPhone
   // and Android apps, https://crossingtime.app) is a secure context.
-  if (!hex) return null;
+  // Tracker 27.9: a page that is not one (a phone testing over Wi-Fi at an
+  // http address) cannot check any code. That is said, not "did not match".
+  if (!hex) return { id: null, ok: false, reason: "unavailable" };
   const hit = GS_SESSION_CODES.find((c) => c.sha256 === hex);
   if (!hit) return null;
   if (hit.from && now < gsLocalTime(hit.from)) return { id: hit.id, ok: false, reason: "early" };
@@ -296,6 +306,8 @@ async function gsCodeMatches(raw) {
 }
 
 const GS_CODE_OUTSIDE = "That session code works only during its session. Ask Azizul Haque or your O&M specialist for help.";
+const GS_CODE_UNAVAILABLE = "This page cannot check codes. Open CrossingTime from the installed app or from an https address.";
+const GS_CODE_NOT_SAVED = "The code is right, but this phone could not save it. Free some space and try again.";
 const GS_CODE_WRONG = "That code did not match. Ask Azizul Haque or your O&M specialist for the session code.";
 
 /* The two places the code can be typed: the pop-up at start, and the card
@@ -362,17 +374,34 @@ async function gsSessionCodeSubmit(which = "card") {
   }
   const result = await gsCodeCheck(value, typeof window.__gsNow === "number" ? window.__gsNow : Date.now());
   if (!result || !result.ok) {
-    gsSessionCodeNote(result ? GS_CODE_OUTSIDE : GS_CODE_WRONG, "warn", which);
+    const why = !result ? GS_CODE_WRONG : (result.reason === "unavailable" ? GS_CODE_UNAVAILABLE : GS_CODE_OUTSIDE);
+    gsSessionCodeNote(why, "warn", which);
     if (input) { input.select?.(); input.focus(); }
     return;
   }
-  gsSetUnlocked(result.id);
+  // Tracker 27.7: say "Unlocked" only when the phone has saved it. The
+  // field and the pop-up stay as they are, so the code need not be retyped.
+  if (!gsSetUnlocked(result.id) || !gsIsUnlocked()) {
+    gsSessionCodeNote(GS_CODE_NOT_SAVED, "warn", which);
+    input?.focus();
+    return;
+  }
   ["card", "modal"].forEach((w) => { const f = gsCodeField(w); if (f.input) f.input.value = ""; });
   gsCloseSessionCodeModal();
   gsRenderHome();
-  gsSessionCodeNote("Unlocked. The activities are open.", "ok");
-  const first = document.querySelector(".step-card:not([hidden]) .step-button");
-  if (first) setTimeout(() => first.focus({ preventScroll: true }), 300);
+  // Tracker 27.8: with no crossing times yet, every activity button is
+  // disabled, and focus used to fall on nothing. Go to a control that works
+  // and say what is needed next.
+  const first = [...document.querySelectorAll(".step-card:not([hidden]) .step-button")]
+    .find((b) => !b.disabled && b.getAttribute("aria-disabled") !== "true");
+  const usable = (el) => el && !el.hidden && !el.disabled && !el.closest("[hidden]");
+  const demo = document.getElementById("tryDemoBtn");
+  const setup = document.getElementById("homeOpenSettingsBtn");
+  const next = first || (usable(setup) ? setup : (usable(demo) ? demo : null));
+  gsSessionCodeNote(first
+    ? "Unlocked. The activities are open."
+    : "Unlocked. Crossing times are needed before the activities open: open Instructor setup, or try it with example times.", "ok");
+  if (next) setTimeout(() => next.focus({ preventScroll: true }), 300);
 }
 
 function gsRenderLock() {
@@ -980,17 +1009,38 @@ async function gsConfirmDeleteHistory() {
   gsCloseReport();
   gsRenderProgress();
   gsRenderHome();
+  // Tracker 27.3: the durable copy is rewritten first (now, not after the
+  // usual wait: 14.4), and "deleted" is said only once that is done. If it
+  // cannot be written, the app says so; the deletion stays marked, so the
+  // old history is never restored, and the copy is rewritten at a later
+  // start.
+  // Tracker 27.38: so does any old record of this student's history from a
+  // time when they were not the student in use.
+  try {
+    const activeId = typeof gsActiveStudentIdNow === "function" ? gsActiveStudentIdNow() : "";
+    if (activeId && window.gsStore?.deleteStudentHistory) await window.gsStore.deleteStudentHistory(activeId);
+  } catch (error) { /* none there */ }
+  // Tracker 27.37: report and CSV files exported earlier go too.
+  try { if (typeof gsClearExports === "function") await gsClearExports(); } catch (error) { /* none left to clear */ }
+  let durable = true;
+  try {
+    const result = await window.gsStore?.clearHistoryNow?.();
+    if (result && result.durable === false) durable = false;
+  } catch (error) {
+    durable = false;
+  }
   const student = gsHistoryStudentName();
   const whose = student ? `Practice history for student ${student}` : "All practice history";
-  const message = gsDataOnPhone()
+  let message = gsDataOnPhone()
     ? `${whose} deleted from this phone. Your phone's backup will no longer have it after its next backup.`
     : `${whose} deleted from this browser.`;
+  if (!durable) {
+    message = `${whose} is deleted from the app, but the app's backup copy could not be rewritten just now. The history will not come back. The app finishes deleting the copy the next time it opens; freeing some space helps.`;
+  }
   const note = document.getElementById("reportNote");
   if (note) note.textContent = message;
   gsCloseDeleteHistory();
   announceScreenReader(message);
-  // The durable copy is rewritten now, not after the usual wait (14.4).
-  try { await window.gsStore?.clearHistoryNow?.(); } catch (error) { /* the copy follows on the next change */ }
 }
 
 /* ============================================================
@@ -1046,6 +1096,7 @@ const GS_SIRI_ACTIVITIES = [
   ["live", "At the street"]
 ];
 let gsSiriBusy = false;
+const GS_SIRI_TIMEOUT_MS = 3 * 60 * 1000;
 
 function gsSiriRowText(title, phrase) {
   return phrase ? `${title}. Siri phrase: "${phrase}"` : `${title}. No Siri phrase yet`;
@@ -1107,8 +1158,14 @@ async function gsSiriChoose(screen, title) {
   gsSiriBusy = true;
   if (note) note.textContent = "";
   let result = null;
-  try { result = await plugin.siriShortcut({ screen }); } catch (error) { result = { result: "failed" }; }
+  // Tracker 27.29: never busy for ever. If the phone has not answered in
+  // three minutes (a sheet closed in a way it did not report), the rows work
+  // again; a late answer for that old request is then ignored.
+  let timedOut = false;
+  const timeout = new Promise((resolve) => setTimeout(() => { timedOut = true; resolve({ result: "cancelled" }); }, GS_SIRI_TIMEOUT_MS));
+  try { result = await Promise.race([plugin.siriShortcut({ screen }), timeout]); } catch (error) { result = { result: "failed" }; }
   gsSiriBusy = false;
+  if (timedOut) return;
   const phrase = result?.phrase || "";
   const messages = {
     added: `${title} added to Siri. Say "${phrase || title}" to open it.`,
@@ -1376,6 +1433,15 @@ function gsBoot() {
   gsBindNativeShortcuts();
   gsBindAndroidBack();
 
+  // Tracker 27.28: said once at start, and it stays in the banner.
+  if (window.gsStorageBlocked) {
+    const blocked = "This browser is blocking storage, so your settings and practice will not be kept after this page is closed. Allow site data for this page, or use the CrossingTime app.";
+    setTimeout(() => {
+      if (typeof setStatus === "function") setStatus(blocked, "warn");
+      if (typeof announceScreenReader === "function") announceScreenReader(blocked);
+    }, 600);
+  }
+
   // ?demo=1 — the conference link. Straight in, nothing to set up.
   const params = new URLSearchParams(window.location.search);
   const wantsDemo = params.get("demo") === "1";
@@ -1383,14 +1449,29 @@ function gsBoot() {
 
   if (wantsDemo) {
     localStorage.setItem(GS_TUTORIAL_KEY, "true"); // no tutorial in the way
-    if (!gsHasTimes() || gsUsingDemoTimes()) {
-      gsLoadDemoTimes();
+    const startDemo = () => {
+      if (!gsHasTimes() || gsUsingDemoTimes()) {
+        gsLoadDemoTimes();
+      } else {
+        gsShowScreen("practice");
+      }
+      gsRenderDemoNote();
+      // The O&M guidance is shown on first run even from the conference link.
+      if (needsDisclaimer) setTimeout(() => gsShowDisclaimer({ thenTutorial: false }), 300);
+    };
+    // Tracker 27.6: a browser that has lost its saved data looks, for a
+    // moment, like a new visitor. The example times used to be written at
+    // once; that stopped the restore of the student's real times and then
+    // replaced them in the backup copy. So the restore check goes first: if
+    // it brings data back, the page starts again and the example times are
+    // not loaded over real ones.
+    const checked = !gsHasTimes() ? window.gsStore?.restoreChecked : null;
+    if (checked && typeof checked.then === "function") {
+      gsShowScreen("home");
+      checked.then((restored) => { if (!restored) startDemo(); }, startDemo);
     } else {
-      gsShowScreen("practice");
+      startDemo();
     }
-    gsRenderDemoNote();
-    // The O&M guidance is shown on first run even from the conference link.
-    if (needsDisclaimer) setTimeout(() => gsShowDisclaimer({ thenTutorial: false }), 300);
     return;
   }
 

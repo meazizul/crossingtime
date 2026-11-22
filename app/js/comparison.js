@@ -191,6 +191,16 @@ function gsSetSamplePitchIndex(index) {
  * under full scale. */
 function gsSamplePartials() {
   const base = GS_SAMPLE_PITCHES[gsSamplePitchIndex()].hz;
+  // Build 28 (tracker F14): one note with its own overtones (2, 3 and 4
+  // times the pitch), like a held organ or reed note. The two plain tones a
+  // minor third apart of earlier builds sounded like a telephone dial tone;
+  // they stay as the "Classic" style. Every overtone is locked to the note,
+  // so the sound stays perfectly steady: no beat or pulse to count by.
+  if (typeof gsSoundStyle === "function" && gsSoundStyle() !== "classic") {
+    const low = base < 250;
+    const gains = low ? [0.4, 0.22, 0.12, 0.06] : [0.5, 0.18, 0.08, 0.04];
+    return gains.map((gain, i) => ({ freq: base * (i + 1), gain }));
+  }
   const upper = base < 250 ? 0.38 : 0.3;
   return [{ freq: base, gain: 0.55 }, { freq: base * 1.189, gain: upper }];
 }
@@ -423,8 +433,22 @@ let gsOpenPads = 0;
 
 /* Pads answer by swipe unless the instructor set buttons only. */
 function gsPadSwipesOn() {
+  // Tracker 27.13: a student who cannot make a swipe (Switch Control on
+  // iPhone; Switch Access, Voice Access or TalkBack on Android) gets the
+  // answer buttons, whatever the instructor's choice. With swipes on, the
+  // buttons were hidden and such a student had no way to answer.
+  if (typeof gsButtonsNeeded === "function" && gsButtonsNeeded()) return false;
   return gsFeature("compareSwipe") !== "off";
 }
+
+/* The gestures of the pad that is open, by name, for the iPhone's own touch
+ * area: VoiceOver's actions rotor and Switch Control's menu list them, so
+ * each answer can be chosen without drawing a swipe (27.13). */
+const GS_PAD_ACTIONS = {
+  answer: [["Longer", "up"], ["Shorter", "down"], ["About the same", "tap"]],
+  streetDetect: [["Vehicle from the left", "left"], ["Vehicle from the right", "right"]],
+  streetArriving: [["It passed in front of me", "tap"], ["It never came", "down"]]
+};
 
 /* ============================================================
  * DIRECT TOUCH (iPhone app, build 12; cursor and clean-up, build 14)
@@ -481,7 +505,10 @@ function gsDirectTouchTarget() {
     return {
       area: surface,
       handlers: () => (gsSwipeHandlers.get(answer) || (() => ({})))(),
-      label: GS_PAD_LABELS.answer
+      // Tracker 27.19: the question first, as on the web area. VoiceOver
+      // reads this label when focus lands on the iPhone's own touch area.
+      label: gsAnswerPad.title ? `${gsAnswerPad.title} ${GS_PAD_LABELS.answer}` : GS_PAD_LABELS.answer,
+      actions: GS_PAD_ACTIONS.answer
     };
   }
   const live = document.getElementById("liveOverlay");
@@ -491,7 +518,8 @@ function gsDirectTouchTarget() {
     return {
       area: surface,
       handlers: () => (gsSwipeHandlers.get(live) || (() => ({})))(),
-      label: gsLiveState.phase === "arriving" ? GS_PAD_LABELS.streetArriving : GS_PAD_LABELS.streetDetect
+      label: gsLiveState.phase === "arriving" ? GS_PAD_LABELS.streetArriving : GS_PAD_LABELS.streetDetect,
+      actions: gsLiveState.phase === "arriving" ? GS_PAD_ACTIONS.streetArriving : GS_PAD_ACTIONS.streetDetect
     };
   }
   return null;
@@ -544,7 +572,8 @@ function gsDirectTouchSync({ focus = false } = {}) {
     if (key === gsDirectTouchLast && !wantFocus) return;
     gsDirectTouchLast = key;
     GSNativePlugin.directTouchShow({
-      x: rect.left, y: rect.top, width, height, label: target.label, hint: gsPadHint(), focus: wantFocus
+      x: rect.left, y: rect.top, width, height, label: target.label, hint: gsPadHint(), focus: wantFocus,
+      actions: (target.actions || []).map(([name, kind]) => ({ name, kind }))
     }).catch?.(() => {});
   }, 60);
 }
@@ -561,6 +590,18 @@ function gsDirectTouchEvent(event) {
   const fn = handlers[event?.kind];
   if (typeof fn !== "function") return false;
   const durationMs = Number(event?.durationMs) || 0;
+  // Tracker 27.4: the iPhone's own touch area reports a still press as a
+  // "tap" with its length. Where "Press and hold to read it larger" is on
+  // offer (large text, a swipe pad), a press of that length opens the
+  // reading panel and is not an answer, exactly as on the web pad.
+  if (event?.kind === "tap" && durationMs >= GS_HOLD_MS && gsPadHoldEnabled()) {
+    const overlay = target.area?.closest?.(".gesture-overlay");
+    if (overlay && overlay.classList.contains("swipes") && overlay.querySelector(".gesture-surface:not([hidden])")) {
+      gsGestureLogAdd("native", "hold", durationMs);
+      gsPadReadOpen(overlay);
+      return true;
+    }
+  }
   fn(performance.now() - durationMs);
   return true;
 }
@@ -673,6 +714,45 @@ function gsSurfaceAccessibility(surface, label) {
   }
 }
 
+/*
+ * Tracker 27.42: a pad keeps the screen on, and the street pad can be open
+ * for a long time. A phone put down and forgotten stayed lit until its
+ * battery ran out. After ten minutes with no touch or key the screen is no
+ * longer held on (the phone's own timeout takes over) and the app says so;
+ * the next touch holds it on again.
+ */
+const GS_PAD_AWAKE_MS = 10 * 60 * 1000;
+let gsPadAwakeTimer = null;
+let gsPadAwakeReleased = false;
+
+function gsPadAwakeTouch() {
+  if (!gsOpenPads) return;
+  if (gsPadAwakeReleased) {
+    gsPadAwakeReleased = false;
+    if (typeof gsKeepAwakeFor === "function") gsKeepAwakeFor("pad", true);
+  }
+  clearTimeout(gsPadAwakeTimer);
+  gsPadAwakeTimer = setTimeout(() => {
+    if (!gsOpenPads) return;
+    gsPadAwakeReleased = true;
+    if (typeof gsKeepAwakeFor === "function") gsKeepAwakeFor("pad", false);
+    const message = "Nothing has been touched for ten minutes, so the screen is no longer kept on. Touch the screen to carry on.";
+    if (typeof setStatus === "function") setStatus(message, "warn");
+    if (typeof announceScreenReader === "function") announceScreenReader(message, { force: true });
+  }, GS_PAD_AWAKE_MS);
+}
+
+function gsPadAwakeWatch(on) {
+  clearTimeout(gsPadAwakeTimer);
+  gsPadAwakeReleased = false;
+  document.removeEventListener("pointerdown", gsPadAwakeTouch, true);
+  document.removeEventListener("keydown", gsPadAwakeTouch, true);
+  if (!on) return;
+  document.addEventListener("pointerdown", gsPadAwakeTouch, true);
+  document.addEventListener("keydown", gsPadAwakeTouch, true);
+  gsPadAwakeTouch();
+}
+
 function gsShowPad(el, { opener = document.activeElement } = {}) {
   if (!el || !el.hidden) return;
   el.gsOpener = opener && opener !== document.body ? opener : null;
@@ -680,6 +760,7 @@ function gsShowPad(el, { opener = document.activeElement } = {}) {
   gsOpenPads += 1;
   gsPadStackSync();
   if (gsOpenPads === 1 && typeof gsKeepAwakeFor === "function") gsKeepAwakeFor("pad", true);
+  if (gsOpenPads === 1) gsPadAwakeWatch(true);
   gsDirectTouchSync({ focus: true });
   if (typeof setMainContentInert === "function") setMainContentInert(true);
   document.body.classList.add("pad-open");
@@ -702,6 +783,7 @@ function gsHidePad(el, { focusTo = null } = {}) {
   gsOpenPads = Math.max(0, gsOpenPads - 1);
   if (!gsOpenPads) {
     if (typeof gsKeepAwakeFor === "function") gsKeepAwakeFor("pad", false);
+    gsPadAwakeWatch(false);
     document.body.classList.remove("pad-open");
     const dialogOpen = [...document.querySelectorAll("dialog")].some((d) => d.open);
     if (!dialogOpen && typeof setMainContentInert === "function") setMainContentInert(false);
@@ -794,6 +876,12 @@ function gsPadReadOpen(overlay) {
     body.appendChild(p);
   });
   panel.gsFrom = overlay;
+  // Tracker 27.21: the panel says it is modal, so the pad behind it must not
+  // be reachable. Two Shift+Tab presses used to land on the pad's Back
+  // button, and Enter there closed the pad and lost the question.
+  panel.gsFocusBack = overlay.contains(document.activeElement) ? document.activeElement : null;
+  panel.gsMadeInert = !panel.contains(overlay) && !overlay.contains(panel) && !overlay.inert;
+  if (panel.gsMadeInert) overlay.inert = true;
   panel.hidden = false;
   body.scrollTop = 0;
   title.focus({ preventScroll: true });
@@ -806,8 +894,16 @@ function gsPadReadClose() {
   if (!panel || panel.hidden) return false;
   panel.hidden = true;
   const from = panel.gsFrom;
+  const back = panel.gsFocusBack;
   panel.gsFrom = null;
-  if (from && !from.hidden) from.querySelector(".gesture-title")?.focus({ preventScroll: true });
+  panel.gsFocusBack = null;
+  if (from && panel.gsMadeInert) from.inert = false;
+  panel.gsMadeInert = false;
+  if (from && !from.hidden) {
+    // Back where the student was (27.21), or the pad's title if that has gone.
+    const target = back && from.contains(back) && !back.hidden && !back.disabled ? back : from.querySelector(".gesture-title");
+    target?.focus({ preventScroll: true });
+  }
   return true;
 }
 
@@ -822,12 +918,19 @@ const gsSwipeHandlers = new Map();
 
 function gsBindSwipeSurface(surface, getHandlers) {
   gsSwipeHandlers.set(surface, getHandlers);
-  const swipe = { active: false, x: 0, y: 0, id: null, lastUpAt: 0 };
+  const swipe = { active: false, x: 0, y: 0, id: null, lastUpAt: 0, downAt: 0 };
   // Controls keep their own behavior; the title and Back are excluded so that a
   // screen-reader double tap on them can never count as an answer.
   const isControl = (target) => Boolean(target?.closest?.("button, select, a, input, label, summary, .gesture-title, .gesture-header"));
   surface.addEventListener("pointerdown", (event) => {
     if (isControl(event.target) || gsPadReadIsOpen()) return;
+    // Tracker 27.26: one gesture at a time. A second finger or the palm
+    // touching while the first finger is down used to start the gesture
+    // again, moving the timing moment to the later touch and losing the
+    // first finger's lift. The first touch is kept, as on the iPhone's own
+    // touch area. (A gesture whose end never arrived is dropped after 10 s
+    // so the pad cannot be left dead.)
+    if (swipe.active && performance.now() - swipe.downAt < 10000) return;
     swipe.active = true;
     swipe.x = event.clientX;
     swipe.y = event.clientY;
@@ -878,7 +981,11 @@ function gsBindSwipeSurface(surface, getHandlers) {
       handlers[kind](swipe.downAt);
     }
   });
-  surface.addEventListener("pointercancel", () => { swipe.active = false; clearTimeout(swipe.holdTimer); });
+  surface.addEventListener("pointercancel", (event) => {
+    if (swipe.active && event.pointerId !== undefined && event.pointerId !== swipe.id) return;   // the other finger
+    swipe.active = false;
+    clearTimeout(swipe.holdTimer);
+  });
   // A screen reader's double-tap arrives as a click with no pointer sequence
   // of its own (TalkBack; VoiceOver with Direct Touch off): it counts as a
   // tap. A click that follows a pointer sequence is that same tap, ignored.
@@ -919,6 +1026,7 @@ function gsOpenAnswerPad({ title, onAnswer, onBack = null, onSkip = null }) {
   if (!overlay) return;
   gsAnswerPad.onAnswer = onAnswer;
   gsAnswerPad.onBack = onBack || onSkip;
+  gsAnswerPad.title = title || "";
   const question = document.getElementById("answerQuestion");
   if (question) question.textContent = title;
   const surface = document.getElementById("answerSurface");
@@ -989,6 +1097,8 @@ function gsHowMuchPadBack() {
 
 /* atMs: the touch-down time the swipe area or the button passes in (the
  * moment that counts is the touch, tracker 20.9); now when there is none. */
+const GS_HOW_MUCH_MIN_MS = 250;
+
 function gsHowMuchTap(atMs) {
   if (!gsHowMuchPad.onDone) return;
   const at = Number.isFinite(atMs) && atMs <= performance.now() ? atMs : performance.now();
@@ -1003,6 +1113,9 @@ function gsHowMuchTap(atMs) {
     }
     return;
   }
+  // Tracker 27.40: a second tap a moment after the first is a double tap
+  // or a bounce of the finger, not an estimate of nearly no time at all.
+  if (at - gsHowMuchPad.start < GS_HOW_MUCH_MIN_MS) return;
   const produced = Math.max(0, at - gsHowMuchPad.start) / 1000;
   playStudentTone();
   const done = gsHowMuchPad.onDone;
@@ -1191,10 +1304,19 @@ function gsCompareBegin() {
   const startSample = () => {
     const delaySec = randomPause ? 1.2 + Math.random() * 3 : 0.35;
     gsLater(gsCompareTimers, () => {
-      gsCompareState.phase = "playing";
-      gsBeginQuiet();
-      gsPlaySample(trial.interval, 0.05, gsCompareStyle());
-      gsLater(gsCompareTimers, gsCompareAskAnswer, 0.05 + trial.interval + 0.4);
+      // Tracker 27.41: the sample, its vibration at each end and the timer
+      // that opens the answer pad start from one moment, and that moment
+      // waits (1.5 s at most) for the audio clock to be running. Only if
+      // this same try is still waiting when it is.
+      const begin = () => {
+        if (gsCompareState.phase !== "waiting" || gsCompareState.intervalSec !== trial.interval) return;
+        gsCompareState.phase = "playing";
+        gsBeginQuiet();
+        gsPlaySample(trial.interval, 0.05, gsCompareStyle());
+        gsLater(gsCompareTimers, gsCompareAskAnswer, 0.05 + trial.interval + 0.4);
+      };
+      if (typeof gsWhenAudioRunning === "function") gsWhenAudioRunning(begin);
+      else begin();
     }, delaySec);
   };
   // With VoiceOver or TalkBack the sample waits until the screen reader has
@@ -2185,7 +2307,11 @@ function gsComparisonInit() {
         return { left: (at) => gsLiveDetect("left", at), right: (at) => gsLiveDetect("right", at) };
       }
       if (gsLiveState.phase === "arriving") {
-        return { tap: (at) => gsLiveArrived(at), up: (at) => gsLiveArrived(at), down: gsLiveNeverCame };
+        // Tracker 27.39: a swipe up used to count as "it passed in front of
+        // me", though no screen said so. A thumb dragged up to settle the
+        // grip ended the vehicle's timing early. Tap, and swipe down for
+        // "it never came", are the two gestures the pad describes.
+        return { tap: (at) => gsLiveArrived(at), down: gsLiveNeverCame };
       }
       return {};
     });

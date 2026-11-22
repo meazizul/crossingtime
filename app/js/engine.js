@@ -53,6 +53,7 @@
     const a11yDescribeSounds = document.getElementById("a11yDescribeSounds");
     const a11yDescribeWhere = document.getElementById("a11yDescribeWhere");
     const a11ySpeechRate = document.getElementById("a11ySpeechRate");
+    const a11yVoice = document.getElementById("a11yVoice");
     const soundTestBtn = document.getElementById("soundTestBtn");
     const soundTestNote = document.getElementById("soundTestNote");
     const textSetupBtn = document.getElementById("textSetupBtn");
@@ -76,6 +77,7 @@
     const acceptableInputs = [...document.querySelectorAll("input[name='acceptableSound']")];
     const outsideInputs = [...document.querySelectorAll("input[name='outsideSound']")];
     const previewButtons = [...document.querySelectorAll(".preview-btn")];
+    const soundStyleInputs = [...document.querySelectorAll("input[name='soundStyle']")];
     const exemplarButtons = [...document.querySelectorAll(".exemplar-btn")];
     const visualPreviewButtons = [...document.querySelectorAll(".visual-preview-btn")];
     const outsideVisualVariantInputs = [...document.querySelectorAll("input[name='outsideVisualVariant']")];
@@ -126,6 +128,7 @@
       a11ySayReplay,
       a11yDescribeSounds,
       a11ySpeechRate,
+      a11yVoice,
       soundTestBtn,
       hapticsTestBtn,
       ...outputModeInputs
@@ -162,6 +165,7 @@
     // (iPhone) or high-contrast text reaches the page as prefers-contrast.
     const prefersMoreContrast = window.matchMedia("(prefers-contrast: more)");
     let gsPhoneTextScale = 1;
+    gsReadAndroidStartScale();
 
     const VISUAL_PULSE_SEC = 0.2;
     const VISUAL_REPLAY_PRE_DELAY_SEC = 0.5; // screen stays normal this long before going black
@@ -284,8 +288,30 @@
       reference_bad: [[0, 550]]
     };
 
+    /* Tracker 27.14: null until the shell has answered; false on an iPad or
+     * a tablet with no vibration motor. */
+    let gsDeviceCanVibrate = null;
+    const GS_NO_VIBRATION = "This device cannot vibrate. Use sound or the screen.";
+
     function hapticsAvailable() {
+      if (gsDeviceCanVibrate === false) return false;
       return (isNativeShell && Boolean(GSNativePlugin || HapticsPlugin)) || hasWebVibrate;
+    }
+
+    function gsCheckVibration() {
+      const done = (can) => {
+        if (typeof can !== "boolean") return;
+        gsDeviceCanVibrate = can;
+        const note = document.getElementById("hapticsSupportNote");
+        if (note) note.textContent = describeHapticsSupport();
+      };
+      try {
+        if (isNativeShell && nativePlatform === "ios" && typeof GSNativePlugin?.audioStatus === "function") {
+          Promise.resolve(GSNativePlugin.audioStatus()).then((status) => done(status?.hapticsSupported)).catch(() => {});
+        } else if (isNativeShell && nativePlatform === "android" && typeof CapacitorGlobal?.Plugins?.GSAndroid?.deviceStatus === "function") {
+          Promise.resolve(CapacitorGlobal.Plugins.GSAndroid.deviceStatus()).then((status) => done(status?.hasVibrator)).catch(() => {});
+        }
+      } catch (error) { /* older shell: as before */ }
     }
 
     /*
@@ -305,6 +331,7 @@
      */
 
     function describeHapticsSupport() {
+      if (gsDeviceCanVibrate === false) return GS_NO_VIBRATION;
       if (isNativeShell && GSNativePlugin) {
         return "Native haptics active. If you feel nothing, check iPhone Settings, Accessibility, Touch, Vibration, and Settings, Sounds and Haptics, System Haptics.";
       }
@@ -344,8 +371,13 @@
             // Android: impact() is a click too short to feel through a
             // pocket. Timed vibrations instead, same rhythms as the iPhone.
             const pulses = ANDROID_VIBRATION_PULSES[type] || [];
+            // Tracker 27.17: kept with the other vibration timers, so
+            // cancelling a try or leaving a screen stops the pulses still to
+            // come (a DeafBlind student felt feedback for a try that was
+            // gone).
             pulses.forEach(([atMs, lengthMs]) => {
-              setTimeout(() => HapticsPlugin.vibrate({ duration: lengthMs }), atMs);
+              const id = setTimeout(() => HapticsPlugin.vibrate({ duration: lengthMs }), atMs);
+              if (atMs > 0 && typeof gsHapticTimers !== "undefined") gsHapticTimers.push(id);
             });
             return;
           }
@@ -577,24 +609,28 @@
     const feedbackOptions = {
       acceptable: {
         "acceptable-a": {
-          label: "Chime A",
+          label: "Right sound A",
+          sample: "right-a",
           duration: SOUND_FALLBACK_TONES["acceptable-a"].duration,
           partials: SOUND_FALLBACK_TONES["acceptable-a"].partials
         },
         "acceptable-b": {
-          label: "Chime B",
+          label: "Right sound B",
+          sample: "right-b",
           duration: SOUND_FALLBACK_TONES["acceptable-b"].duration,
           partials: SOUND_FALLBACK_TONES["acceptable-b"].partials
         }
       },
       outside: {
         "outside-a": {
-          label: "Low Pulse A",
+          label: "Wrong sound A",
+          sample: "wrong-a",
           duration: SOUND_FALLBACK_TONES["outside-a"].duration,
           partials: SOUND_FALLBACK_TONES["outside-a"].partials
         },
         "outside-b": {
-          label: "Low Pulse B",
+          label: "Wrong sound B",
+          sample: "wrong-b",
           duration: SOUND_FALLBACK_TONES["outside-b"].duration,
           partials: SOUND_FALLBACK_TONES["outside-b"].partials
         }
@@ -603,14 +639,173 @@
 
     const userSoundOptions = {
       marker: {
+        sample: "marker",
         duration: SOUND_FALLBACK_TONES["user-marker"].duration,
         partials: SOUND_FALLBACK_TONES["user-marker"].partials
       },
       confirm: {
+        sample: "confirm",
         duration: SOUND_FALLBACK_TONES["user-confirm"].duration,
         partials: SOUND_FALLBACK_TONES["user-confirm"].partials
       }
     };
+
+    /*
+     * Build 28 (tracker F14): designed sounds.
+     *
+     * Cindi asked for the standard of a professionally designed interface
+     * sound: polished, easy to hear, a clear start and end, and right and
+     * wrong told apart from the first moment. The short cues are now
+     * recordings from the public-domain UI SFX set (see www/sounds/
+     * LICENSE.md), in two styles, with the tones of builds 1 to 27 kept as
+     * "Classic". Each recording starts on its first sample, so a cue still
+     * lands on the exact moment it is scheduled for.
+     *
+     *   right-a / right-b    three notes going up
+     *   wrong-a              a low double knock (low from the first moment)
+     *   wrong-b              one bright note, then two falling
+     *   marker               the student's own tap
+     *   confirm              one clear note (the button chime)
+     *   reference            two quick ticks: the real crossing time
+     *
+     * The warning-time sound stays synthesized (comparison.js): a recording
+     * cannot be held for any number of seconds with clean ends.
+     *
+     * If a recording is not loaded yet, or the style is Classic, the tone of
+     * the same role plays instead, so nothing is ever silent.
+     */
+    const GS_SOUND_STYLE_KEY = "om-sound-style";
+    const GS_SOUND_STYLES = ["bright", "warm", "classic"];
+    const GS_SOUND_STYLE_DEFAULT = "bright";
+    const GS_SOUND_ROLES = ["right-a", "right-b", "wrong-a", "wrong-b", "marker", "confirm", "reference"];
+    /* The "Sound pitch" setting also moves the cues, by a few semitones. A
+     * recording played lower is also a little longer; its start does not move. */
+    const GS_CUE_SEMITONES = [-5, -4, -2, 0, 2];
+    const cueBuffers = {};
+    const cueLoading = {};
+
+    function gsSoundStyle() {
+      const stored = localStorage.getItem(GS_SOUND_STYLE_KEY);
+      return GS_SOUND_STYLES.includes(stored) ? stored : GS_SOUND_STYLE_DEFAULT;
+    }
+
+    function gsSetSoundStyle(style) {
+      const clean = GS_SOUND_STYLES.includes(style) ? style : GS_SOUND_STYLE_DEFAULT;
+      localStorage.setItem(GS_SOUND_STYLE_KEY, clean);
+      gsLoadCueSounds();
+      return clean;
+    }
+
+    /* What the right and wrong sounds are like, in words, for "What the
+     * sounds mean": it follows the style and the choice in Settings. */
+    const GS_SOUND_WORDS = {
+      classic: { acceptable: "A short, bright chime.", outside: "A longer, low, buzzing pulse." },
+      "acceptable-a": "Three notes going up.",
+      "acceptable-b": "Three notes going up, in wider steps.",
+      "outside-a": "A short, low sound.",
+      "outside-b": "One bright note, then two lower notes."
+    };
+
+    function gsSoundWords(category) {
+      if (gsSoundStyle() === "classic") return GS_SOUND_WORDS.classic[category];
+      return GS_SOUND_WORDS[getSelectedSound(category)] || GS_SOUND_WORDS[`${category}-a`];
+    }
+
+    function gsRefreshSoundWords() {
+      const right = document.getElementById("rightSoundWords");
+      const wrong = document.getElementById("wrongSoundWords");
+      if (right) right.textContent = gsSoundWords("acceptable");
+      if (wrong) wrong.textContent = gsSoundWords("outside");
+    }
+
+    function gsCueRate() {
+      const index = typeof gsSamplePitchIndex === "function" ? gsSamplePitchIndex() : 3;
+      return Math.pow(2, (GS_CUE_SEMITONES[index] ?? 0) / 12);
+    }
+
+    /* Web and Android: fetch and decode the seven recordings of the chosen
+     * style. The iPhone app loads its own copies (GapSenseAudio.swift). */
+    function gsLoadCueSounds() {
+      const style = gsSoundStyle();
+      if (nativeSound) {
+        // The iPhone app plays its own copies; ask once which ones it has.
+        if (nativeCueNames || cueLoading.native || typeof GSNativePlugin?.cueList !== "function") return;
+        cueLoading.native = true;
+        Promise.resolve(nativeCall("cueList", {}))
+          .then((result) => { nativeCueNames = new Set(Array.isArray(result?.names) ? result.names : []); })
+          .catch(() => { cueLoading.native = false; });
+        return;
+      }
+      if (style === "classic" || cueLoading[style]) return;
+      if (typeof fetch !== "function") return;
+      cueLoading[style] = true;
+      const context = ensureAudioContext();
+      GS_SOUND_ROLES.forEach((role) => {
+        fetch(`sounds/${style}/${role}.wav`)
+          .then((response) => (response.ok ? response.arrayBuffer() : Promise.reject(new Error("missing"))))
+          .then((data) => new Promise((resolve, reject) => {
+            const pending = context.decodeAudioData(data, resolve, reject);
+            if (pending && typeof pending.catch === "function") pending.catch(reject);
+          }))
+          .then((buffer) => { cueBuffers[`${style}/${role}`] = buffer; })
+          .catch(() => { cueLoading[style] = false; });
+      });
+    }
+
+    /* Play one recording. Returns false when the tone should play instead. */
+    function gsPlayCue(role, startTime = 0, volumeScale = 1, skipSec = 0) {
+      const style = gsSoundStyle();
+      if (style === "classic" || !role) return false;
+      if (a11ySettings.outputMode === "visual-only") return true;
+      const rate = gsCueRate();
+      const level = TEST_TUNING.masterVolume * volumeScale;
+      if (nativeSound) {
+        if (!nativeCueNames) gsLoadCueSounds();
+        if (!nativeCueNames || !nativeCueNames.has(`${style}/${role}`)) return false;
+        nativeCall("cue", { name: `${style}/${role}`, delay: Math.max(0, startTime), level, rate });
+        return true;
+      }
+      const buffer = cueBuffers[`${style}/${role}`];
+      if (!buffer) {
+        gsLoadCueSounds();
+        return false;
+      }
+      const context = ensureAudioContext();
+      if (context.state !== "running" && !gsPlayCue.retrying) {
+        // Tracker 27.41: placed in real time, as the tones are; a recording
+        // whose start has passed is joined part-way through.
+        const askedAt = performance.now();
+        context.resume().then(() => {
+          const placed = gsPlaceLateSound(startTime, buffer.duration / rate, (performance.now() - askedAt) / 1000, true);
+          if (!placed) return;
+          gsPlayCue.retrying = true;
+          try {
+            gsPlayCue(role, placed.startTime, volumeScale, placed.skipped);
+          } finally {
+            gsPlayCue.retrying = false;
+          }
+        }).catch(() => {});
+        return true;
+      }
+      const now = context.currentTime + startTime;
+      const source = context.createBufferSource();
+      source.buffer = buffer;
+      source.playbackRate.value = rate;
+      const gain = context.createGain();
+      gain.gain.setValueAtTime(level, now);
+      // Past the soft clipper: see gsBuildOutputStage.
+      source.connect(gain).connect(cueOutput || masterLimiter);
+      const skip = Math.max(0, Math.min(Number(skipSec) || 0, buffer.duration / rate - 0.02));
+      source.start(now, skip * rate);
+      const length = buffer.duration / rate - skip;
+      rememberScheduledSound({ gain, oscillators: [source], endAt: now + length + 0.02 });
+      gsDuckSteadyAround(now, length);
+      gsCuesPlayed += 1;
+      return true;
+    }
+    let gsCuesPlayed = 0;
+    let cueOutput = null;
+    let nativeCueNames = null;
 
     let audioWarmedUp = false;
 
@@ -634,6 +829,57 @@
       } catch (error) {
         /* non-fatal: the next tone will still play */
       }
+    }
+
+    /* Linear up to 0.8, then bending over so the output never passes 1. The
+     * curve covers inputs from -2 to 2 (the node in front halves the signal). */
+    function softKneeCurve() {
+      const points = 4097;
+      const curve = new Float32Array(points);
+      for (let i = 0; i < points; i += 1) {
+        const x = ((i / (points - 1)) * 2 - 1) * 2;
+        const size = Math.abs(x);
+        const y = size <= 0.8 ? size : 0.8 + 0.2 * Math.tanh((size - 0.8) / 0.2);
+        curve[i] = x < 0 ? -y : y;
+      }
+      return curve;
+    }
+
+    /*
+     * The output chain, on any audio context (the tests build it on an
+     * offline one). Returns the two inputs:
+     *   tones  every synthesized sound. It goes through a soft clipper:
+     *          against build 8 the steady sample is about 7 dB louder and
+     *          the chimes about 5 dB, and the added overtones carry better
+     *          on a phone speaker (testers found the sound too quiet at full
+     *          phone volume).
+     *   cues   the recorded sounds (build 28). A recording is finished
+     *          sound; the clipper would only roughen it, so it joins after.
+     * The sum of the two is held under full scale by a gentle knee at 0.8,
+     * exactly as the iPhone app does in GapSenseAudio.swift, and a limiter
+     * stays behind that as the last guard.
+     */
+    function gsBuildOutputStage(context) {
+      const limiter = context.createDynamicsCompressor();
+      limiter.threshold.value = -2;
+      limiter.knee.value = 0;
+      limiter.ratio.value = 20;
+      limiter.attack.value = 0.001;
+      limiter.release.value = 0.05;
+      limiter.connect(context.destination);
+      const knee = context.createWaveShaper();
+      knee.curve = softKneeCurve();
+      knee.connect(limiter);
+      const sum = context.createGain();
+      sum.gain.value = 0.5;
+      sum.connect(knee);
+      const tones = context.createWaveShaper();
+      tones.curve = softClipCurve(3);
+      tones.oversample = "2x";
+      tones.connect(sum);
+      const cues = context.createGain();
+      cues.connect(sum);
+      return { tones, cues, limiter };
     }
 
     function softClipCurve(drive) {
@@ -697,24 +943,9 @@
         // pass through untouched, but overlapping cues (user marker + feedback
         // tone landing together during replay) are caught here instead of
         // hard-clipping into distortion.
-        const limiter = audioContext.createDynamicsCompressor();
-        limiter.threshold.value = -2;
-        limiter.knee.value = 0;
-        limiter.ratio.value = 20;
-        limiter.attack.value = 0.001;
-        limiter.release.value = 0.05;
-        limiter.connect(audioContext.destination);
-        // Loudness: every cue goes through a soft clipper before the limiter.
-        // Against build 8 the steady sample is about 7 dB louder and the
-        // chimes about 5 dB, peaks stay just under full scale, and the added
-        // overtones carry better on a phone speaker.
-        // Testers found the sound too quiet at full phone volume. The iPhone
-        // app does the same in GapSenseAudio.swift. `masterLimiter` is the
-        // input every cue connects to.
-        masterLimiter = audioContext.createWaveShaper();
-        masterLimiter.curve = softClipCurve(3);
-        masterLimiter.oversample = "2x";
-        masterLimiter.connect(limiter);
+        const stage = gsBuildOutputStage(audioContext);
+        masterLimiter = stage.tones;
+        cueOutput = stage.cues;
         // iOS moves a context to "interrupted" (not "suspended") when
         // something else takes the audio hardware for a moment: a call, Siri,
         // another app, a haptic engine starting. The old check only resumed
@@ -834,6 +1065,78 @@
       scheduledSounds.length = 0;
     }
 
+    /*
+     * Build 28 (tracker 27.41): one clock for a try.
+     *
+     * On Android and the web the sound runs on the audio clock and
+     * everything else (vibration, the screen, when the answer pad opens, the
+     * stop time in Comparison preparation) on ordinary timers. If the audio
+     * clock is stopped when a try starts (the browser stops it after a few
+     * idle minutes), the sound used to start late by however long the clock
+     * took to start, while the rest ran on time. Three things now keep them
+     * together:
+     *   1. every touch or key starts the clock again, so it is nearly always
+     *      running before a try can begin;
+     *   2. a sample's start waits until the clock is confirmed running
+     *      (gsWhenAudioRunning), so the sound, its vibration and the pad
+     *      start from the same moment, and the student's stop time is
+     *      measured from when the sound really began;
+     *   3. a sound asked for while the clock is stopped is placed where it
+     *      was meant to be in real time (gsPlaceLateSound).
+     * The iPhone app plays sound through its own player and is not affected.
+     */
+    function gsAudioRunning() {
+      if (nativeSound) return true;
+      try { return ensureAudioContext().state === "running"; } catch (error) { return true; }
+    }
+
+    /* Run fn once the audio clock is running. At once, in the same step,
+     * when it already is (the usual case). If it will not start within
+     * maxMs, fn runs anyway: the try is not held for ever. */
+    function gsWhenAudioRunning(fn, maxMs = 1500) {
+      if (gsAudioRunning()) { fn(); return; }
+      const context = audioContext;
+      let done = false;
+      let poll = null;
+      let limit = null;
+      const go = () => {
+        if (done) return;
+        done = true;
+        clearInterval(poll);
+        clearTimeout(limit);
+        fn();
+      };
+      poll = setInterval(() => { if (context.state === "running") go(); }, 20);
+      limit = setTimeout(go, maxMs);
+      try {
+        const pending = context.resume();
+        if (pending && typeof pending.then === "function") pending.then(() => { if (context.state === "running") go(); }, () => {});
+      } catch (error) { /* the limit ends the wait */ }
+    }
+
+    /* Where a sound goes when it could only be scheduled lateSec after it
+     * was asked for. null: its whole time has passed. */
+    function gsPlaceLateSound(startTime, duration, lateSec, keepsEnd) {
+      const late = Math.max(0, Number(lateSec) || 0);
+      const start = startTime - late;
+      if (start >= 0) return { startTime: start, duration, skipped: 0 };
+      if (!keepsEnd) return { startTime: 0, duration, skipped: -start };     // a short cue: now
+      const left = duration + start;
+      return left > 0.03 ? { startTime: 0, duration: left, skipped: -start } : null;
+    }
+
+    // 1. Any touch or key starts the audio clock again if it has stopped.
+    ["pointerdown", "keydown"].forEach((type) => {
+      document.addEventListener(type, () => {
+        try {
+          if (!nativeSound && audioContext && audioContext.state !== "running" && audioContext.state !== "closed") {
+            const pending = audioContext.resume();
+            if (pending && typeof pending.catch === "function") pending.catch(() => {});
+          }
+        } catch (error) { /* the next sound tries again */ }
+      }, { capture: true, passive: true });
+    });
+
     function playCompositeTone(partials, duration = 0.16, startTime = 0, volumeScale = 1, envelope = "pulse") {
       if (a11ySettings.outputMode === "visual-only") return;
       if (nativeSound) {
@@ -851,10 +1154,18 @@
         // Suspended or interrupted: wait for the clock to run, then schedule
         // once. A second failure plays on whatever clock there is rather than
         // looping.
+        // Tracker 27.41: the timers, the vibration and the screen did not
+        // wait while the clock was started, so the sound is placed where it
+        // was meant to be in real time, not the same delay after a late
+        // start. If its start has already passed, a steady sound plays what
+        // is left of its length, so it still ends on time.
+        const askedAt = performance.now();
         context.resume().then(() => {
+          const placed = gsPlaceLateSound(startTime, duration, (performance.now() - askedAt) / 1000, envelope === "steady");
+          if (!placed) return;
           playCompositeTone.retrying = true;
           try {
-            playCompositeTone(partials, duration, startTime, volumeScale, envelope);
+            playCompositeTone(partials, placed.duration, placed.startTime, volumeScale, envelope);
           } finally {
             playCompositeTone.retrying = false;
           }
@@ -927,6 +1238,13 @@
         return stopNative;
       }
       const context = ensureAudioContext();
+      // Tracker 27.41: this used not to look at the clock at all. Callers
+      // that time something from the sound wait for the clock first
+      // (gsWhenAudioRunning); if it is still stopped here, it is asked to
+      // run, and the sound begins the moment it does.
+      if (context.state !== "running" && context.state !== "closed") {
+        try { const pending = context.resume(); if (pending && typeof pending.catch === "function") pending.catch(() => {}); } catch (error) { /* as before */ }
+      }
       const now = context.currentTime;
       const gain = context.createGain();
       const level = TEST_TUNING.masterVolume * volumeScale;
@@ -964,6 +1282,7 @@
 
     function playSoundOption(option, startTime = 0, volumeScale = 1) {
       if (!option) return;
+      if (option.sample && gsPlayCue(option.sample, startTime, volumeScale)) return;
       playCompositeTone(option.partials, option.duration || 0.12, startTime, volumeScale);
     }
 
@@ -988,6 +1307,7 @@
 
     /** Two quick blips: "this is the real crossing time". Never a feedback cue. */
     function playReferenceTick(startTime = 0) {
+      if (gsPlayCue("reference", startTime, TEST_TUNING.feedbackVolume)) return;
       const option = SOUND_FALLBACK_TONES["reference-tick"];
       playSoundOption(option, startTime, TEST_TUNING.feedbackVolume);
       playSoundOption(option, startTime + 0.11, TEST_TUNING.feedbackVolume);
@@ -1019,6 +1339,11 @@
     }
 
     function applyStoredSelections() {
+      const style = gsSoundStyle();
+      soundStyleInputs.forEach((input) => { input.checked = input.value === style; });
+      gsLoadCueSounds();
+      gsLoadVoiceManifest();
+      gsRefreshSoundWords();
       const acceptableSelection = getSelectedSound("acceptable");
       const outsideSelection = getSelectedSound("outside");
       acceptableInputs.forEach((input) => {
@@ -1402,13 +1727,46 @@
      * cache first), or download it in a browser. Returns "shared",
      * "downloaded", "copied", "cancelled" or "failed" (tracker F3).
      */
+    const GS_EXPORT_FOLDER = "reports";
+
+    /* Tracker 27.37: no exported report or CSV is left on the phone after
+     * "Delete history" or "Remove student" (or from an earlier build, which
+     * wrote them to the top of the cache). */
+    async function gsClearExports() {
+      const Filesystem = CapacitorGlobal?.Plugins?.Filesystem;
+      if (!isNativeShell || !Filesystem) return 0;
+      let removed = 0;
+      try {
+        await Filesystem.rmdir({ path: GS_EXPORT_FOLDER, directory: "CACHE", recursive: true });
+        removed += 1;
+      } catch (error) { /* no folder: nothing was exported */ }
+      try {
+        const listing = await Filesystem.readdir({ path: "", directory: "CACHE" });
+        for (const entry of listing?.files || []) {
+          const file = typeof entry === "string" ? entry : entry?.name;
+          if (!file || !/^(crossingtime|gapsense)-report.*\.(csv|txt)$/i.test(file)) continue;
+          try { await Filesystem.deleteFile({ path: file, directory: "CACHE" }); removed += 1; } catch (error) { /* gone already */ }
+        }
+      } catch (error) { /* nothing to list */ }
+      return removed;
+    }
+
     async function gsShareFile({ name, text, mime = "text/plain", title = name }) {
       const SharePlugin = CapacitorGlobal?.Plugins?.Share;
       const Filesystem = CapacitorGlobal?.Plugins?.Filesystem;
       try {
         if (isNativeShell && SharePlugin?.share && Filesystem?.writeFile) {
-          const written = await Filesystem.writeFile({ path: name, data: text, directory: "CACHE", encoding: "utf8", recursive: true });
-          await SharePlugin.share({ title, dialogTitle: title, files: [written.uri] });
+          // Build 28: one folder for every exported file (tracker 27.31: on
+          // Android it is the only folder the share sheet may read), and
+          // the file is deleted once the share sheet has closed, whatever
+          // the student did there (27.37).
+          const path = `${GS_EXPORT_FOLDER}/${name}`;
+          const written = await Filesystem.writeFile({ path, data: text, directory: "CACHE", encoding: "utf8", recursive: true });
+          try {
+            await SharePlugin.share({ title, dialogTitle: title, files: [written.uri] });
+          } finally {
+            try { await Filesystem.deleteFile({ path, directory: "CACHE" }); } catch (cleanup) { /* cleared with the folder later */ }
+          }
           return "shared";
         }
       } catch (error) {
@@ -1567,7 +1925,17 @@
       // was made for, never to whoever is selected (tracker 20.4). When that
       // means a switch, the app restarts and the link is applied after it.
       const parsedForStudent = parseShareToken(hash.slice(3));
-      if (parsedForStudent?.code && typeof gsStudentsRouteSetupLink === "function" && gsStudentsRouteSetupLink(parsedForStudent.code)) return true;
+      if (parsedForStudent?.code && typeof gsStudentsRouteSetupLink === "function") {
+        const routed = gsStudentsRouteSetupLink(parsedForStudent.code);
+        if (routed === "refused") {
+          // Tracker 27.2: for another student, who could not be reached.
+          // Nothing is applied to the student who is open.
+          pendingStatusMessage = gsStudentsLinkRefusal;
+          clearImportedHash();
+          return true;
+        }
+        if (routed) return true;
+      }
       applyShareToken(hash.slice(3));
       clearImportedHash();
       return true;
@@ -1599,7 +1967,14 @@
           try {
             window.history.replaceState({}, document.title, `${window.location.pathname}${window.location.search}#ts=${token}`);
           } catch (error) { /* the link is still applied below */ }
-          if (gsStudentsRouteSetupLink(forStudent.code)) return true;
+          const routed = gsStudentsRouteSetupLink(forStudent.code);
+          if (routed === "refused") {
+            clearImportedHash();
+            setStatus(gsStudentsLinkRefusal, "warn");
+            announceScreenReader(gsStudentsLinkRefusal);
+            return true;
+          }
+          if (routed) return true;
           clearImportedHash();
         }
         const ok = applyShareToken(token);
@@ -1845,9 +2220,30 @@
       }
     }
 
+    /* Build 28 (tracker 27.25): the Android shell hands over the phone's font
+     * size before the first screen is drawn, so nothing jumps after launch. */
+    function gsReadAndroidStartScale() {
+      try {
+        const scale = Number(window.GSAndroidStart?.textScale?.());
+        if (Number.isFinite(scale) && scale > 0) gsPhoneTextScale = scale;
+      } catch (error) { /* older shell: read a moment later, as before */ }
+    }
+
     function gsReadAndroidTextScale() {
       const android = nativePlatform === "android" ? CapacitorGlobal?.Plugins?.GSAndroid : null;
       if (!android || typeof android.textScale !== "function") return;
+      // And while the app is open: the page stays, and takes the new size.
+      if (!gsReadAndroidTextScale.listening && typeof android.addListener === "function") {
+        gsReadAndroidTextScale.listening = true;
+        try {
+          android.addListener("textScale", (event) => {
+            const scale = Number(event?.scale);
+            if (!Number.isFinite(scale) || scale <= 0) return;
+            gsPhoneTextScale = scale;
+            if (a11ySettings.textSize === "system") applyA11ySettings();
+          });
+        } catch (error) { /* older shell */ }
+      }
       try {
         Promise.resolve(android.textScale()).then((result) => {
           const scale = Number(result?.scale);
@@ -2028,13 +2424,24 @@
     function startSynchronizedVisualReplay(events, endAtSec, target = null, { append = false } = {}) {
       // The bar on the screen runs whenever anything is shown at all; the
       // full-screen flashes only with the synchronized visual replay on.
+      const flashes = visualOutputEnabled() && a11ySettings.syncVisualReplay;
+      const joining = append && Boolean(visualReplayState.rafId);
+      // Tracker 27.11: the earlier replay is cleared first. The clean-up also
+      // stops the bar, and it used to run after the new bar had started, so
+      // the bar and its markers were hidden as soon as they appeared.
+      // A second replay that joins a bar still running (append) leaves the
+      // bar alone and only clears the old full-screen frame.
+      if (flashes && !joining) {
+        if (append) hideVisualReplayFrame();
+        else stopVisualReplay();
+      }
       if (!target) gsReplayBarStart(events, endAtSec, { append });
-      if (!visualOutputEnabled() || !a11ySettings.syncVisualReplay) return;
+      if (!flashes) return;
       const context = ensureAudioContext();
       // Replay B schedules two replays back to back; the second used to stop
       // the first, so its visuals vanished (bug 30, Oct 2026 review). With
       // append, the new events join the timeline already running.
-      if (append && visualReplayState.rafId) {
+      if (joining) {
         const offset = context.currentTime - visualReplayState.replayStartTime;
         visualReplayState.events = [
           ...visualReplayState.events,
@@ -2043,7 +2450,6 @@
         visualReplayState.endAtSec = Math.max(visualReplayState.endAtSec, endAtSec + offset);
         return;
       }
-      stopVisualReplay();
       visualReplayState.events = [...events].sort((a, b) => a.timeSec - b.timeSec);
       visualReplayState.nextIndex = 0;
       visualReplayState.endAtSec = endAtSec;
@@ -2245,6 +2651,28 @@
      * correct answer. A zero-width space is toggled on alternate calls so an
      * identical message still counts as a change and is re-announced.
      */
+    /* One live region inside every pop-up, made at start so that it exists
+     * before anything is written to it (a region created with its text
+     * already in it is not announced). Returns the region of the pop-up on
+     * top, or null when none is open. */
+    function gsDialogAnnouncers() {
+      document.querySelectorAll("dialog").forEach((dialog) => {
+        if (dialog.querySelector(":scope > .gs-dialog-announcer")) return;
+        const region = document.createElement("div");
+        region.className = "sr-only gs-dialog-announcer";
+        region.setAttribute("aria-live", "polite");
+        region.setAttribute("aria-atomic", "true");
+        dialog.appendChild(region);
+      });
+    }
+    gsDialogAnnouncers();
+
+    function gsDialogAnnouncer() {
+      const open = [...document.querySelectorAll("dialog")].filter((d) => d.open);
+      const top = open[open.length - 1];
+      return top ? top.querySelector(":scope > .gs-dialog-announcer") : null;
+    }
+
     let srAnnounceToggle = false;
     let srAnnounceClearTimer = null;
     function announceScreenReader(message, { force = false, speak = true } = {}) {
@@ -2262,6 +2690,20 @@
       if (speak && gsSelfVoiceOn() && !started) gsSpeak(message);
       if (!a11ySettings.announceCues) return;
       srAnnounceToggle = !srAnnounceToggle;
+      // Tracker 27.36: while a pop-up is open, the words go to the live
+      // region inside it. A pop-up opened as a modal tells the screen reader
+      // to ignore everything outside it, the page's own announcer included
+      // (WebKit bug 276553), so the sound test result, "Playing three test
+      // pulses" and the setting messages were not read.
+      const inDialog = gsDialogAnnouncer();
+      if (inDialog) {
+        inDialog.textContent = srAnnounceToggle ? message : `${message}​`;
+        clearTimeout(inDialog.gsClearTimer);
+        inDialog.gsClearTimer = setTimeout(() => {
+          if (inDialog.textContent.replace(/\u200b/g, "") === message) inDialog.textContent = "";
+        }, 4000);
+        return;
+      }
       srAnnouncer.textContent = srAnnounceToggle ? message : `${message}​`;
       // The live region sits after every screen in the page. While it holds
       // text, a VoiceOver user swiping past the last control lands on it and
@@ -2310,16 +2752,226 @@
       return typeof window.speechSynthesis !== "undefined" && typeof window.SpeechSynthesisUtterance === "function";
     }
 
+    /* Build 28: prefer the most natural US English voice the browser offers.
+     * Names differ by system: "Natural" and "Neural" (Edge, Android),
+     * "Premium" and "Enhanced" (Apple), then the usual good defaults. */
     function pickEnglishVoice() {
       try {
-        const voices = window.speechSynthesis.getVoices() || [];
-        return voices.find((v) => v.lang === "en-US" && v.localService)
-          || voices.find((v) => v.lang === "en-US")
-          || voices.find((v) => /^en/i.test(v.lang))
-          || null;
+        const voices = (window.speechSynthesis.getVoices() || []).filter((v) => /^en[-_]US/i.test(v.lang));
+        const all = voices.length ? voices : (window.speechSynthesis.getVoices() || []).filter((v) => /^en/i.test(v.lang));
+        const score = (v) => {
+          const name = String(v.name || "");
+          if (/natural|neural/i.test(name)) return 5;
+          if (/premium/i.test(name)) return 4;
+          if (/enhanced/i.test(name)) return 3;
+          if (/^(samantha|ava|allison|zoe|google us english)/i.test(name)) return 2;
+          return v.localService ? 1 : 0;
+        };
+        let best = null;
+        all.forEach((v) => { if (!best || score(v) > score(best)) best = v; });
+        return best;
       } catch (error) {
         return null;
       }
+    }
+
+    /*
+     * Build 28: a natural voice.
+     *
+     * The phone's built-in voice sounds robotic (Azizul, 21 Nov 2026). The
+     * app's own fixed sentences ("Get ready", "Replay", "Correct.", the
+     * directions on each screen) are now recordings of one natural voice,
+     * made once with an open text-to-speech model and shipped in www/voice/.
+     * voice/manifest.json maps each sentence to its file.
+     *
+     * A message is played from recordings only when every sentence in it
+     * has one. Anything else (a number of seconds, a student's name) is
+     * spoken by the phone's voice as before, so nothing is ever left
+     * unsaid, and one message never changes voice half-way.
+     */
+    const GS_VOICE_KEY = "om-voice";            // "natural" (default) or "phone"
+    const GS_SENTENCE = /\S.*?(?:[.!?\u2026]+(?=\s|$)|$)/g;
+    let gsVoiceManifest = null;
+    let gsVoiceClipActive = null;               // set while recorded sentences play
+    let gsVoiceAudioEl = null;
+    let gsVoiceClipsPlayed = 0;
+
+    function gsVoiceNatural() {
+      return localStorage.getItem(GS_VOICE_KEY) !== "phone";
+    }
+
+    function gsSetVoice(value) {
+      localStorage.setItem(GS_VOICE_KEY, value === "phone" ? "phone" : "natural");
+    }
+
+    /* One sentence as the manifest spells it: lower case, single spaces, no
+     * final full stop. A question mark stays: a question sounds different. */
+    function gsVoiceKey(sentence) {
+      return String(sentence || "")
+        .replace(/\u200b/g, "")
+        .replace(/\s+/g, " ")
+        .trim()
+        .replace(/[.!\u2026]+$/, "")
+        .trim()
+        .toLowerCase();
+    }
+
+    /* The recordings that say this text, in order; null if any part of it
+     * has none. */
+    function gsVoiceClipsFor(text) {
+      if (!gsVoiceManifest || !gsVoiceNatural()) return null;
+      // The iPhone app plays recordings itself or not at all: web audio there
+      // would hand the sound back to the silent switch.
+      if (nativeSound && typeof GSNativePlugin?.speakClips !== "function") return null;
+      const whole = gsVoiceManifest[gsVoiceKey(text)];
+      if (whole) return [whole];
+      const sentences = String(text).match(GS_SENTENCE) || [];
+      if (!sentences.length || sentences.length > 12) return null;
+      const files = [];
+      for (const sentence of sentences) {
+        const file = gsVoiceManifest[gsVoiceKey(sentence)];
+        if (!file) return null;
+        files.push(file);
+      }
+      return files;
+    }
+
+    function gsLoadVoiceManifest() {
+      if (gsVoiceManifest || typeof fetch !== "function") return;
+      fetch("voice/manifest.json")
+        .then((response) => (response.ok ? response.json() : null))
+        .then((data) => {
+          if (!data || !data.clips || typeof data.clips !== "object") return;
+          gsVoiceManifest = data.clips;
+          setTimeout(gsWarmVoiceCache, 20000);
+        })
+        .catch(() => {});
+    }
+
+    /* A recording as a URL the player can use. Fetched as a whole file and
+     * handed over as a blob: a media player asks a server for byte ranges,
+     * which the offline cache cannot keep, so a recording played straight
+     * from its address would be missing at a street corner with no signal. */
+    const gsVoiceBlobUrls = new Map();
+    function gsVoiceClipUrl(file) {
+      if (gsVoiceBlobUrls.has(file)) return Promise.resolve(gsVoiceBlobUrls.get(file));
+      return fetch(`voice/${file}.mp3`)
+        .then((response) => (response.ok ? response.blob() : Promise.reject(new Error("missing"))))
+        .then((blob) => {
+          const url = URL.createObjectURL(blob);
+          gsVoiceBlobUrls.set(file, url);
+          return url;
+        });
+    }
+
+    /*
+     * Website only: once the page has settled, fetch every recording one at
+     * a time so the offline cache holds the whole voice (about 9 MB), not
+     * just the sentences heard so far. Skipped when the phone asks to save
+     * data, and done once for each set of recordings.
+     */
+    function gsWarmVoiceCache() {
+      if (isNativeShell || !gsVoiceManifest || !gsVoiceNatural()) return;
+      if (!navigator.serviceWorker?.controller || navigator.connection?.saveData) return;
+      const files = [...new Set(Object.values(gsVoiceManifest))].sort();
+      let hash = 5381;
+      for (const ch of files.join("")) hash = ((hash * 33) ^ ch.charCodeAt(0)) >>> 0;
+      const stamp = `${files.length}-${hash}`;
+      if (localStorage.getItem("om-voice-cached") === stamp) return;
+      let index = 0;
+      const step = () => {
+        if (index >= files.length) {
+          localStorage.setItem("om-voice-cached", stamp);
+          return;
+        }
+        if (document.hidden || navigator.onLine === false) return;   // next visit carries on
+        const file = files[index];
+        index += 1;
+        fetch(`voice/${file}.mp3`).then(() => setTimeout(step, 120), () => {});
+      };
+      step();
+    }
+
+    function gsVoiceAudio() {
+      if (!gsVoiceAudioEl) {
+        gsVoiceAudioEl = new Audio();
+        gsVoiceAudioEl.preload = "auto";
+      }
+      return gsVoiceAudioEl;
+    }
+
+    /* Safari only lets a page start sound from a touch. One silent play on
+     * the first touch lets the same player speak later, when a timer or the
+     * end of a sound asks for it. */
+    if (!isNativeShell && typeof Audio === "function") {
+      document.addEventListener("pointerdown", () => {
+        try {
+          const el = gsVoiceAudio();
+          if (gsVoiceClipActive || el.src) return;
+          el.src = "data:audio/wav;base64,UklGRiYAAABXQVZFZm10IBAAAAABAAEAQB8AAIA+AAACABAAZGF0YQIAAAAAAA==";
+          const pending = el.play();
+          if (pending && typeof pending.catch === "function") pending.catch(() => {});
+        } catch (error) {
+          /* the phone's voice is still there */
+        }
+      }, { once: true, capture: true, passive: true });
+    }
+
+    /*
+     * Play recorded sentences one after another. done() when the last has
+     * ended, or when speech is stopped; fallback() when a recording cannot
+     * be played (offline before it was ever fetched, a blocked player), so
+     * the phone's voice says the words instead.
+     */
+    function gsPlayVoiceClips(files, { done, fallback }) {
+      const rate = Number(a11ySettings.speechRate) || 1;
+      const active = { ended: false, stop: null };
+      const end = (how) => {
+        if (active.ended) return;
+        active.ended = true;
+        if (gsVoiceClipActive === active) gsVoiceClipActive = null;
+        if (how === "fail") fallback();
+        else done();
+      };
+      gsVoiceClipActive = active;
+      gsVoiceClipsPlayed += 1;
+      if (nativeSound && typeof GSNativePlugin?.speakClips === "function") {
+        // Stopped through stopSpeaking, which gsStopSpeech sends anyway.
+        active.stop = () => end("done");
+        Promise.resolve(nativeCall("speakClips", { files, rate, interrupt: true }))
+          .then((result) => end(result && result.completed === false ? "fail" : "done"), () => end("fail"));
+        return;
+      }
+      const el = gsVoiceAudio();
+      let index = 0;
+      // Fetch them all now, so one sentence follows the next without a wait.
+      files.forEach((file) => { gsVoiceClipUrl(file).catch(() => {}); });
+      const next = () => {
+        if (active.ended) return;
+        if (index >= files.length) {
+          end("done");
+          return;
+        }
+        const file = files[index];
+        index += 1;
+        gsVoiceClipUrl(file).then((url) => {
+          if (active.ended) return;
+          el.onended = next;
+          el.onerror = () => end("fail");
+          el.src = url;
+          el.defaultPlaybackRate = rate;
+          el.playbackRate = rate;     // the browser keeps the pitch
+          const pending = el.play();
+          if (pending && typeof pending.catch === "function") pending.catch(() => end("fail"));
+        }).catch(() => end("fail"));
+      };
+      active.stop = () => {
+        el.onended = null;
+        el.onerror = null;
+        try { el.pause(); } catch (error) { /* already stopped */ }
+        end("done");
+      };
+      next();
     }
 
     /**
@@ -2333,10 +2985,76 @@
         finished = true;
         if (typeof onDone === "function") onDone();
       };
-      if (!text || !speechAvailable() || a11ySettings.outputMode === "visual-only") {
+      if (!text || a11ySettings.outputMode === "visual-only") {
         if (onDone) setTimeout(done, 0);
         return false;
       }
+      // Build 28: the recorded natural voice, when it has every sentence.
+      // Not while something else is still talking and must not be cut off.
+      const clips = (interrupt || !gsSpeechBusy()) ? gsVoiceClipsFor(text) : null;
+      if (clips) {
+        if (interrupt) gsStopSpeech();
+        gsPlayVoiceClips(clips, {
+          done,
+          fallback: () => {
+            if (speechAvailable()) gsSpeakPhone(text, { done, interrupt: false, maxWaitMs, onDone: null });
+            else done();
+          }
+        });
+        if (onDone) setTimeout(done, maxWaitMs);
+        return true;
+      }
+      // A phone with no speech engine still has the recordings above
+      // (tracker 27.15); past this point there is nothing to speak with.
+      if (!speechAvailable()) {
+        if (onDone) setTimeout(done, 0);
+        return false;
+      }
+      return gsSpeakPhone(text, { done, interrupt, maxWaitMs, onDone });
+    }
+
+    /* Tracker 27.15: the phone has no voice the app can use. Said in
+     * Accessibility, under Speech, in plain words. */
+    let gsSpeechUnavailable = false;
+    const GS_NO_VOICE = "This phone has no English voice the app can use. The app's recorded sentences are still spoken; other words are shown on the screen and given to TalkBack. To add a voice: Android Settings, Accessibility, Text-to-speech output.";
+
+    function gsShowSpeechNote() {
+      const note = document.getElementById("speechVoiceNote");
+      if (!note) return;
+      note.hidden = !gsSpeechUnavailable;
+      note.textContent = gsSpeechUnavailable ? GS_NO_VOICE : "";
+    }
+
+    /* Asked at start and whenever "Speak directions aloud" is turned on. */
+    function gsCheckSpeechEngine({ announce = false } = {}) {
+      const android = nativePlatform === "android" ? CapacitorGlobal?.Plugins?.GSAndroid : null;
+      if (!android || typeof android.speechStatus !== "function") return;
+      const ask = (again) => Promise.resolve(android.speechStatus()).then((status) => {
+        if (status?.starting && again > 0) { setTimeout(() => ask(again - 1), 1000); return; }
+        gsSpeechUnavailable = Boolean(status && (status.failed || !status.ready));
+        gsShowSpeechNote();
+        if (gsSpeechUnavailable && announce) announceScreenReader(GS_NO_VOICE, { force: true, speak: false });
+      }).catch(() => {});
+      ask(4);
+    }
+
+    /* Tracker 27.35: the spoken confirmation of a setting in Accessibility.
+     * With VoiceOver or TalkBack running the app does not use its own voice
+     * (it talked over the screen reader, which was reading the control that
+     * had just changed); the words go to the screen reader instead. With no
+     * screen reader it is spoken as before, so the student hears the new
+     * rate or voice at once. */
+    function gsConfirmSetting(text) {
+      if (!text) return;
+      if (gsScreenReaderOn()) {
+        announceScreenReader(text, { force: true, speak: false });
+        return;
+      }
+      gsSpeak(text);
+    }
+
+    /* The phone's own voice: any text at all. */
+    function gsSpeakPhone(text, { done, interrupt, maxWaitMs, onDone }) {
       if (nativeSpeech) {
         // Spoken by the app itself: on iPhone through the same session as the
         // tones, so the silent switch cannot mute "Get ready" either; on
@@ -2348,7 +3066,17 @@
           done();
         };
         Promise.resolve(nativeSpeechCall("speak", { text, rate: Number(a11ySettings.speechRate) || 1, interrupt }))
-          .then(finish, finish);
+          .then((result) => {
+            // Tracker 27.15: Android says when nothing was spoken (no speech
+            // engine, or no English voice). The words then go to the live
+            // region, where a screen reader or the banner carries them.
+            if (result && result.spoken === false && nativeSpeechToken === token) {
+              gsSpeechUnavailable = true;
+              gsShowSpeechNote();
+              try { announceScreenReader(text, { force: true, speak: false }); } catch (error) { /* the screen still shows it */ }
+            }
+            finish();
+          }, finish);
         if (onDone) setTimeout(done, maxWaitMs);
         return true;
       }
@@ -2373,6 +3101,7 @@
 
     /** Is anything being spoken right now? */
     function gsSpeechBusy() {
+      if (gsVoiceClipActive) return true;
       if (nativeSpeech) return nativeSpeechToken !== null;
       try {
         return speechAvailable() && window.speechSynthesis.speaking;
@@ -2382,6 +3111,7 @@
     }
 
     function gsStopSpeech() {
+      if (gsVoiceClipActive) gsVoiceClipActive.stop();
       if (nativeSpeech) {
         nativeSpeechToken = null;
         nativeSpeechCall("stopSpeaking", {});
@@ -2418,7 +3148,17 @@
     let gsScreenReaderRunning = false;
 
     function gsScreenReaderOn() {
-      return typeof window.__gsScreenReader === "boolean" ? window.__gsScreenReader : gsScreenReaderRunning;
+      if (typeof window.__gsScreenReader === "boolean") return window.__gsScreenReader;
+      // Build 28 (tracker 27.27, first step): a browser cannot tell the page
+      // that a screen reader is running, so the student can say so in
+      // Accessibility. The app then leaves the talking to the screen
+      // reader, as the iPhone and Android apps do by themselves.
+      if (!isNativeShell && gsWebScreenReader()) return true;
+      return gsScreenReaderRunning;
+    }
+
+    function gsWebScreenReader() {
+      try { return localStorage.getItem("om-a11y-web-screen-reader") === "true"; } catch (error) { return false; }
     }
 
     /* Self-voicing is "for use without VoiceOver or TalkBack" (Settings).
@@ -2445,12 +3185,33 @@
     function gsScreenReaderAnswered() {
       if (gsScreenReaderKnownResolve) { gsScreenReaderKnownResolve(gsScreenReaderOn()); gsScreenReaderKnownResolve = null; }
     }
+    /* Tracker 27.13: other assistive technology the shells can see. A
+     * student using any of these cannot draw a swipe, so the pads show
+     * their buttons. TalkBack on Android is included: its swipes belong to
+     * TalkBack, and on a pad it could only tap (the App Guide already said
+     * "On Android with TalkBack, use the buttons"). */
+    const gsAssistive = { switchControl: false, switchAccess: false, voiceAccess: false };
+
+    function gsNoteAssistive(status) {
+      if (!status) return;
+      ["switchControl", "switchAccess", "voiceAccess"].forEach((name) => {
+        if (typeof status[name] === "boolean") gsAssistive[name] = status[name];
+      });
+    }
+
+    function gsButtonsNeeded() {
+      if (typeof window.__gsButtonsNeeded === "boolean") return window.__gsButtonsNeeded;
+      if (gsAssistive.switchControl || gsAssistive.switchAccess || gsAssistive.voiceAccess) return true;
+      return nativePlatform === "android" && isNativeShell && gsScreenReaderOn();
+    }
+
     function gsRefreshScreenReader() {
       const plugin = gsScreenReaderPlugin();
       if (!plugin) { gsScreenReaderAnswered(); return Promise.resolve(gsScreenReaderOn()); }
       try {
         return Promise.resolve(plugin.accessibilityStatus()).then((status) => {
           if (status && typeof status.screenReader === "boolean") gsScreenReaderRunning = status.screenReader;
+          gsNoteAssistive(status);
           gsScreenReaderAnswered();
           return gsScreenReaderOn();
         }).catch(() => { gsScreenReaderAnswered(); return gsScreenReaderOn(); });
@@ -2465,6 +3226,7 @@
       try {
         plugin.addListener("screenReader", (event) => {
           if (typeof event?.screenReader === "boolean") gsScreenReaderRunning = event.screenReader;
+          gsNoteAssistive(event);
         });
       } catch (error) { /* older shell: checked again on return to the app */ }
     })();
@@ -2496,7 +3258,18 @@
       const plugin = nativePlatform === "ios" ? GSNativePlugin : null;
       if (plugin && typeof plugin.announce === "function") {
         try {
-          Promise.resolve(plugin.announce({ text, timeoutSec: capMs / 1000 })).then(done, done);
+          // Tracker 27.20: "finished: false" means VoiceOver dropped or cut
+          // the words, and may still be talking. Wait out the time the
+          // words should take (at least 0.6 s, at most 2.5 s more) rather
+          // than start the tones over them.
+          const askedAt = performance.now();
+          Promise.resolve(plugin.announce({ text, timeoutSec: capMs / 1000 })).then((result) => {
+            if (result && result.finished === false) {
+              setTimeout(done, Math.min(2500, Math.max(600, estimateMs - (performance.now() - askedAt))));
+            } else {
+              done();
+            }
+          }, done);
           setTimeout(done, capMs + 500);   // never stuck, even if the shell is
           return;
         } catch (error) { /* fall through to the live region */ }
@@ -2514,7 +3287,13 @@
           // Not heard by the time the estimate is over: the phone does not
           // report it, so never wait longer than build 24 did.
           Promise.resolve(android.waitForSpeech({ startWithinMs: Math.min(2500, estimateMs), quietMs: 450, maxMs: Math.max(8000, estimateMs * 3) }))
-            .then((result) => { if (result && result.heard) done(); else rest(); }, rest);
+            .then((result) => {
+              // 27.20: heard, but it never went quiet: TalkBack is still
+              // talking. One more bounded wait, then the tones.
+              if (result && result.heard && result.ended === false) setTimeout(done, 1500);
+              else if (result && result.heard) done();
+              else rest();
+            }, rest);
           setTimeout(done, Math.max(8000, estimateMs * 3) + 500);   // never stuck
           return;
         } catch (error) { /* older shell: the estimate */ }
@@ -3265,6 +4044,7 @@
       a11yAnnounceCues.checked = a11ySettings.announceCues;
       if (a11ySelfVoice) a11ySelfVoice.checked = a11ySettings.selfVoice;
       if (a11ySpeechRate) a11ySpeechRate.value = String(a11ySettings.speechRate);
+      if (a11yVoice) a11yVoice.value = gsVoiceNatural() ? "natural" : "phone";
       if (a11ySayReplay) a11ySayReplay.checked = a11ySettings.sayReplay;
       if (a11yDescribeSounds) a11yDescribeSounds.checked = a11ySettings.describeSounds;
       if (a11yDescribeWhere) a11yDescribeWhere.value = a11ySettings.describeWhere;
@@ -3328,11 +4108,22 @@
     });
 
     acceptableInputs.forEach((input) => {
-      input.addEventListener("change", () => { storeSelection("acceptable", input.value); });
+      input.addEventListener("change", () => { storeSelection("acceptable", input.value); gsRefreshSoundWords(); });
     });
 
     outsideInputs.forEach((input) => {
-      input.addEventListener("change", () => { storeSelection("outside", input.value); });
+      input.addEventListener("change", () => { storeSelection("outside", input.value); gsRefreshSoundWords(); });
+    });
+
+    soundStyleInputs.forEach((input) => {
+      input.addEventListener("change", () => {
+        if (!input.checked) return;
+        gsSetSoundStyle(input.value);
+        gsRefreshSoundWords();
+        // Let the student hear the change at once: their own sound.
+        ensureAudioContext();
+        setTimeout(() => playStudentTone(0), 250);
+      });
     });
 
     previewButtons.forEach((button) => {
@@ -3509,6 +4300,7 @@
       a11ySettings.selfVoice = a11ySelfVoice.checked;
       localStorage.setItem("om-a11y-self-voice", String(a11ySettings.selfVoice));
       if (a11ySettings.selfVoice) {
+        gsCheckSpeechEngine({ announce: true });
         gsSpeak(speechAvailable()
           ? "Speaking directions aloud is on."
           : "");
@@ -3518,11 +4310,32 @@
       }
     });
 
+    (function gsBindWebScreenReader() {
+      const box = document.getElementById("a11yWebScreenReader");
+      const row = document.getElementById("a11yWebScreenReaderRow");
+      if (!box || !row) return;
+      row.hidden = isNativeShell;          // the apps find out by themselves
+      box.checked = gsWebScreenReader();
+      box.addEventListener("change", () => {
+        localStorage.setItem("om-a11y-web-screen-reader", String(box.checked));
+        if (box.checked) gsStopSpeech();
+        announceScreenReader(box.checked
+          ? "The app will leave the talking to your screen reader."
+          : "The app will use its own voice for Replay and results.", { force: true, speak: false });
+      });
+    })();
+
+    a11yVoice?.addEventListener("change", () => {
+      gsSetVoice(a11yVoice.value);
+      gsStopSpeech();
+      gsConfirmSetting("This is the voice.");
+    });
+
     a11ySpeechRate?.addEventListener("change", () => {
       const rate = Number(a11ySpeechRate.value);
       a11ySettings.speechRate = [0.8, 1, 1.25].includes(rate) ? rate : 1;
       localStorage.setItem("om-a11y-speech-rate", String(a11ySettings.speechRate));
-      gsSpeak("This is the speaking rate.");
+      gsConfirmSetting("This is the speaking rate.");
     });
 
     /* Verbosity (build 20, Cindi 1 Nov 2026): High, Medium (what builds 15-19
@@ -3541,20 +4354,20 @@
       if (a11yDescribeSounds) a11yDescribeSounds.checked = more;
       GS_RESULTS_WORDS_ACTIVITIES.forEach((name) => localStorage.removeItem(`om-a11y-describe-${name}`));
       gsRenderResultsWordsSwitches();
-      gsSpeak({ high: "Verbosity high.", medium: "Verbosity medium.", low: "Verbosity low." }[level]);
+      gsConfirmSetting({ high: "Verbosity high.", medium: "Verbosity medium.", low: "Verbosity low." }[level]);
     });
 
     a11ySayReplay?.addEventListener("change", () => {
       a11ySettings.sayReplay = a11ySayReplay.checked;
       localStorage.setItem("om-a11y-say-replay", String(a11ySettings.sayReplay));
-      if (a11ySettings.sayReplay) gsSpeak("Replay");
+      if (a11ySettings.sayReplay) gsConfirmSetting("Replay");
     });
 
     a11yDescribeSounds?.addEventListener("change", () => {
       a11ySettings.describeSounds = a11yDescribeSounds.checked;
       localStorage.setItem("om-a11y-describe-sounds", String(a11ySettings.describeSounds));
       gsRenderResultsWordsSwitches();
-      if (a11ySettings.describeSounds) gsSpeak("The app will announce results and describe the sounds.");
+      if (a11ySettings.describeSounds) gsConfirmSetting("The app will announce results and describe the sounds.");
     });
 
     // Build 27 (tracker F12): choose it here for every activity, or on each
@@ -3609,7 +4422,7 @@
       const note = () => {
         if (!soundTestNote) return;
         const state = context.state === "running" ? "on" : context.state;
-        soundTestNote.textContent = `Sound engine: ${state}. You should hear a steady tone, then a chime.`;
+        soundTestNote.textContent = `Sound engine: ${state}. You should hear a steady tone, then the right sound.`;
       };
       const play = () => {
         playCompositeTone(gsSamplePartials(), 1.0, 0.05, gsSampleLevel(), "steady");
@@ -3623,12 +4436,18 @@
       }
     });
 
+    let hapticsTestRunning = false;
     hapticsTestBtn.addEventListener("click", () => {
       if (!hapticsAvailable()) {
-        setStatus("No haptics available on this platform.", "warn");
-        announceScreenReader("No haptics available on this platform.");
+        const none = gsDeviceCanVibrate === false ? GS_NO_VIBRATION : "No haptics available on this platform.";
+        setStatus(none, "warn");
+        announceScreenReader(none);
         return;
       }
+      // Tracker 27.30: a second press during the test used to read the
+      // setting while the test had it switched on, and then leave it on.
+      if (hapticsTestRunning) return;
+      hapticsTestRunning = true;
       const wasEnabled = a11ySettings.vibrate;
       a11ySettings.vibrate = true;
       hapticCue("marker");
@@ -3636,6 +4455,7 @@
       setTimeout(() => {
         hapticCue("reference_bad");
         a11ySettings.vibrate = wasEnabled;
+        hapticsTestRunning = false;
       }, 900);
       setStatus("Playing three test pulses: marker, acceptable, outside.");
       announceScreenReader("Playing three test pulses: marker, acceptable, outside.");
@@ -3659,6 +4479,8 @@
       applyA11ySettings();
     });
     gsReadAndroidTextScale();
+    gsCheckVibration();
+    gsCheckSpeechEngine();
     {
       // In a browser the choice follows the browser's own text size.
       const followOption = a11yTextSize?.querySelector('option[value="system"]');
@@ -3778,6 +4600,16 @@
         nativeCall("keepAwake", { on: gsWakeWanted });
         return;
       }
+      // Build 28 (tracker 27.16): Android's own keep-awake. The web wake
+      // lock below is refused under Battery Saver and by some web views; it
+      // is still asked for when the app's own call fails.
+      const androidShell = isNativeShell && nativePlatform === "android" ? CapacitorGlobal?.Plugins?.GSAndroid : null;
+      if (androidShell && typeof androidShell.keepAwake === "function") {
+        try {
+          await androidShell.keepAwake({ on: gsWakeWanted });
+          return;
+        } catch (error) { /* the web lock below */ }
+      }
       try {
         if (gsWakeWanted && !gsWakeLock && navigator.wakeLock) {
           const lock = await navigator.wakeLock.request("screen");
@@ -3852,6 +4684,13 @@
       const status = await gsNativeAudioStatus();
       if (status && Number.isFinite(status.outputLatency)) nativeOutputLatency = status.outputLatency;
     }
+    // Build 28 (tracker 27.18): the Android app says when the sound's output
+    // changes (headphones, Bluetooth, hearing aids connecting or dropping).
+    if (isNativeShell && nativePlatform === "android" && typeof CapacitorGlobal?.Plugins?.GSAndroid?.addListener === "function") {
+      try {
+        CapacitorGlobal.Plugins.GSAndroid.addListener("audioInterrupted", (event) => { gsAudioInterrupted(event?.reason || "native"); });
+      } catch (error) { /* the web clock check still runs */ }
+    }
     if (nativeSound && typeof GSNativePlugin?.addListener === "function") {
       try {
         // The iPhone app says when a call, Siri or an alarm takes the sound,
@@ -3887,17 +4726,20 @@
     shareTimingSettingsBtn.addEventListener("click", () => { copyShareTimingLink(); });
     textSetupBtn?.addEventListener("click", () => { textSetupToStudent(); });
 
+    const GS_COPY_FAILED = "Could not copy. Select the text in the box and copy it by hand.";
+
     copySetupTimingMessageBtn.addEventListener("click", async () => {
       if (!validateShareSetup()) return;
       populateShareMessagePreviews();
-      await copyTextToClipboard(setupTimingMessage.value);
-      setShareNote("Copied the setup message.");
+      // Tracker 27.24: say what really happened.
+      const copied = await copyTextToClipboard(setupTimingMessage.value);
+      setShareNote(copied ? "Copied the setup message." : GS_COPY_FAILED);
     });
 
     copyPracticeTimingMessageBtn.addEventListener("click", async () => {
       populateShareMessagePreviews();
-      await copyTextToClipboard(practiceTimingMessage.value);
-      setShareNote("Copied the practice link.");
+      const copied = await copyTextToClipboard(practiceTimingMessage.value);
+      setShareNote(copied ? "Copied the practice link." : GS_COPY_FAILED);
     });
 
     // Keep the previews current while the instructor changes what to include.

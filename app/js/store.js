@@ -32,6 +32,49 @@
  * Loaded before everything else; nothing here depends on the other files.
  * ============================================================ */
 
+/*
+ * Build 28 (tracker 27.28): a browser can block storage altogether (cookies
+ * and site data turned off, some private modes, an embedded page). Reading
+ * or writing localStorage then throws, and the first throw used to stop the
+ * app half-way through starting. Every part of the app reads localStorage
+ * directly, so the guard is put here, once, before anything else runs: when
+ * storage cannot be used, an in-memory stand-in takes its place for this
+ * visit. The app opens and works; nothing is kept after the page is closed,
+ * and the app says so (window.gsStorageBlocked, shown at start by app.js).
+ */
+(function gsStorageGuard() {
+  function memoryStorage() {
+    const map = new Map();
+    return {
+      get length() { return map.size; },
+      key: (index) => [...map.keys()][index] ?? null,
+      getItem: (key) => (map.has(String(key)) ? map.get(String(key)) : null),
+      setItem: (key, value) => { map.set(String(key), String(value)); },
+      removeItem: (key) => { map.delete(String(key)); },
+      clear: () => { map.clear(); }
+    };
+  }
+  function usable(name) {
+    try {
+      const storage = window[name];
+      const probe = "gs-storage-probe";
+      storage.setItem(probe, "1");
+      storage.removeItem(probe);
+      return true;
+    } catch (error) {
+      return false;
+    }
+  }
+  window.gsStorageBlocked = false;
+  ["localStorage", "sessionStorage"].forEach((name) => {
+    if (usable(name)) return;
+    try {
+      Object.defineProperty(window, name, { value: memoryStorage(), configurable: true });
+      if (name === "localStorage") window.gsStorageBlocked = true;
+    } catch (error) { /* a browser that will not let it be replaced: as before */ }
+  });
+})();
+
 (function gsStoreModule() {
   const PREFIX = "om-";
   const HISTORY_KEY = "om-attempt-log";
@@ -39,6 +82,11 @@
   const HISTORY_FILE = "gapsense/history.json";
   const RESTORED_FLAG = "gs-restored-once";
   const CLEARED_FLAG = "gs-cleared";              // the page itself emptied localStorage: do not restore on the next load
+  // Tracker 27.3: the student deleted their history, and the durable copy
+  // has not been rewritten yet (no space, the app closed first). Kept in
+  // localStorage, outside the om- keys, until a write of the copy succeeds.
+  // While it is there, history is never restored from the copy.
+  const DELETION_PENDING = "gs-history-deletion-pending";
   const DEBOUNCE_MS = 400;
 
   const cap = window.Capacitor;
@@ -48,7 +96,9 @@
   const useNative = native && Preferences && Filesystem;
 
   const state = {
-    backend: useNative ? "native" : (typeof indexedDB !== "undefined" ? "indexeddb" : "none"),
+    // With storage blocked there is nothing to copy, and the browser's
+    // database is blocked with it.
+    backend: window.gsStorageBlocked ? "none" : (useNative ? "native" : (typeof indexedDB !== "undefined" ? "indexeddb" : "none")),
     lastSavedAt: 0,
     lastError: "",
     pending: false,
@@ -119,6 +169,73 @@
     await idbSet(HISTORY_KEY, history || "[]");
   }
 
+  /* ---------------- one record for each waiting student's history ----------------
+   *
+   * Build 28 (tracker 27.38). A phone with several students kept every
+   * waiting student's whole practice history (up to 5,000 tries each) inside
+   * one settings value, om-students. That value was held in the web view's
+   * storage, which has a limit, and copied into the phone's Preferences,
+   * which are meant for small values. With a few busy students, saving a
+   * try or adding a student could fail with "storage full" long before any
+   * history limit was reached.
+   *
+   * A waiting student's history is now its own record: a file in the app's
+   * data folder on iPhone and Android, an entry in the browser's database on
+   * the web. om-students keeps only a small index (students.js). The
+   * history comes back into the web view's storage only while that student
+   * is the one in use.
+   */
+  const STUDENT_FOLDER = "gapsense/students";
+  const studentRecord = (id) => {
+    if (!/^[a-z0-9]{3,40}$/i.test(String(id || ""))) throw new Error("not a student id");
+    return String(id);
+  };
+
+  async function loadStudentHistory(id) {
+    const name = studentRecord(id);
+    if (state.backend === "none") return null;
+    if (useNative) {
+      try {
+        const file = await Filesystem.readFile({ path: `${STUDENT_FOLDER}/${name}.json`, directory: "DATA", encoding: "utf8" });
+        return typeof file?.data === "string" ? file.data : null;
+      } catch (error) {
+        return null;
+      }
+    }
+    const value = await idbGet(`student-history:${name}`);
+    return typeof value === "string" ? value : null;
+  }
+
+  /* Writes the record and reads it back: resolves only when what is stored
+   * is exactly what was given. */
+  async function saveStudentHistory(id, json) {
+    const name = studentRecord(id);
+    if (typeof json !== "string") throw new Error("not a history");
+    if (state.backend === "none") throw new Error("no durable storage");
+    if (useNative) {
+      await Filesystem.writeFile({ path: `${STUDENT_FOLDER}/${name}.json`, directory: "DATA", data: json, encoding: "utf8", recursive: true });
+    } else {
+      await idbSet(`student-history:${name}`, json);
+    }
+    const back = await loadStudentHistory(name);
+    if (back !== json) throw new Error("the record did not read back");
+  }
+
+  async function deleteStudentHistory(id) {
+    const name = studentRecord(id);
+    if (state.backend === "none") return;
+    if (useNative) {
+      try { await Filesystem.deleteFile({ path: `${STUDENT_FOLDER}/${name}.json`, directory: "DATA" }); } catch (error) { /* none there */ }
+      return;
+    }
+    await openDb().then((db) => new Promise((resolve, reject) => {
+      const tx = db.transaction("kv", "readwrite");
+      tx.objectStore("kv").delete(`student-history:${name}`);
+      tx.oncomplete = () => { resolve(); db.close(); };
+      tx.onerror = () => { reject(tx.error); db.close(); };
+    }));
+  }
+
   /* ---------------- what to copy ---------------- */
 
   function snapshot() {
@@ -171,10 +288,16 @@
       state.lastSavedAt = Date.now();
       state.lastError = "";
       state.writes += 1;
+      // The copy now matches what is here, deleted history included.
+      try { originalRemove.call(localStorage, DELETION_PENDING); } catch (error) { /* ignore */ }
     } catch (error) {
       state.lastError = String(error?.message || error);
     }
     return state;
+  }
+
+  function deletionPending() {
+    try { return localStorage.getItem(DELETION_PENDING) === "1"; } catch (error) { return false; }
   }
 
   /* ---------------- mirror every write ---------------- */
@@ -227,7 +350,10 @@
     // value that is there. By the time this runs the app has already written
     // its own defaults (a settings version, say), so "lost" means the keys
     // that matter are gone: the crossing times and the history.
-    const historyMissing = !localStorage.getItem(HISTORY_KEY) && copy.history && copy.history !== "[]";
+    // Tracker 27.3: history the student deleted is not "missing". The copy
+    // still has it only because the rewrite failed; it is rewritten now
+    // (the caller schedules a sync when nothing was restored).
+    const historyMissing = !deletionPending() && !localStorage.getItem(HISTORY_KEY) && copy.history && copy.history !== "[]";
     const settingsMissing = !localStorage.getItem("om-full-time") && !localStorage.getItem("om-clear-time") && !localStorage.getItem(HISTORY_KEY) && !localStorage.getItem("om-students");
     if (!historyMissing && !settingsMissing) return false;
     let restoredSomething = false;
@@ -273,11 +399,23 @@
     /* Delete all my practice history (tracker 14.4): the emptied history is
      * written to the copy now, not after the wait, and the copy is never
      * restored over it on the next load. Settings stay in the copy. */
-    clearHistoryNow() {
+    /* Resolves to { durable }: true when the copy was rewritten (or there is
+     * no copy to rewrite), false when it could not be; the deletion then
+     * stays marked as pending and is finished at a later start (27.3). */
+    async clearHistoryNow() {
       clearedHere = true;
       try { sessionStorage.setItem(CLEARED_FLAG, "1"); } catch (error) { /* no session storage */ }
-      return syncNow();
+      if (state.backend === "none") return { durable: true };
+      try { originalSet.call(localStorage, DELETION_PENDING, "1"); } catch (error) { /* ignore */ }
+      await syncNow();
+      return { durable: !deletionPending() };
     },
+    deletionPending,
+    /* A waiting student's practice history, as its own record (27.38). */
+    loadStudentHistory,
+    saveStudentHistory,
+    deleteStudentHistory,
+    canKeepStudentRecords: () => state.backend !== "none",
     /* Switching or removing a student (build 20): the new state goes to the
      * copy now, before the app starts again, and is never replaced by the
      * old copy on the next load. */
@@ -302,6 +440,10 @@
 
   requestPersistence();
   restorePromise = restoreIfNeeded();
+  // Tracker 27.6: for anything that must not write crossing times before the
+  // restore check is over (the demo link). Resolves to true when data was
+  // restored and the page is starting again.
+  window.gsStore.restoreChecked = restorePromise.catch(() => false);
   restorePromise.then((restored) => {
     // The first copy (and the one-time migration) happens here.
     if (!restored) scheduleSync();

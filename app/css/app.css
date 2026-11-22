@@ -1949,6 +1949,12 @@ body.large-text-layout .step-button { grid-template-columns: minmax(0, 1fr); }
   inset: 0;
   z-index: 9000;
   height: var(--viewport-height);
+  /* Build 28: never shorter than the screen. --viewport-height follows the
+     system's "visual viewport", and iOS 26 can leave that 68 points too
+     small after a text field was used (the session code box, Instructor
+     setup). The pad then stopped short of the bottom and the page showed
+     under it. A pad has no text field, so it has no reason to shrink. */
+  min-height: 100%;
   background: var(--bg);
   color: var(--text);
   display: flex;
@@ -2230,6 +2236,7 @@ body.pad-hold .gesture-overlay.swipes .pad-hold-hint {
   inset: 0;
   z-index: 9500;                       /* above the pads (9000-9100), below the visual replay (9999) */
   height: var(--viewport-height, 100vh);
+  min-height: 100%;                    /* as the pads: never shorter than the screen */
   background: var(--bg);
   color: var(--text);
   display: flex;
