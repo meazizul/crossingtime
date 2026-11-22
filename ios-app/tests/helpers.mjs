@@ -59,7 +59,14 @@ export async function history(page) {
 }
 
 export async function announcer(page) {
-  return page.evaluate(() => document.getElementById("srAnnouncer").textContent.replace(/​/g, ""));
+  // Build 28 (tracker 27.36): while a pop-up is open the words are written to
+  // the live region inside it, not to the page's own announcer.
+  return page.evaluate(() => {
+    const clean = (el) => (el ? el.textContent.replace(/​/g, "") : "");
+    const main = clean(document.getElementById("srAnnouncer"));
+    if (main) return main;
+    return [...document.querySelectorAll(".gs-dialog-announcer")].map(clean).find(Boolean) || "";
+  });
 }
 
 /** Advance the fake clock in steps, giving timers and rAF a chance to run. */

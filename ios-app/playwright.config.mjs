@@ -1,6 +1,19 @@
-// Browser tests for the web app, run in the Google Chrome already installed on
-// the machine (no browser download). `npm test` from ios-app/.
-import { defineConfig } from "@playwright/test";
+// Browser tests for the web app. `npm test` from ios-app/.
+import { defineConfig, chromium } from "@playwright/test";
+import { existsSync } from "node:fs";
+
+// Which browser (tracker 27.33). The tests are no longer tied to one Mac:
+//   1. GS_CHROME_PATH=/path/to/chrome   that browser, on any system;
+//   2. Playwright's own Chromium, when it is installed (`npx playwright
+//      install chromium`): the default on a new machine, Linux included;
+//   3. otherwise the Google Chrome already on this Mac, as before, so no
+//      download is needed where the tests have always run.
+const MAC_CHROME = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
+function browserPath() {
+  if (process.env.GS_CHROME_PATH) return process.env.GS_CHROME_PATH;
+  try { if (existsSync(chromium.executablePath())) return undefined; } catch (error) { /* not installed */ }
+  return existsSync(MAC_CHROME) ? MAC_CHROME : undefined;
+}
 
 export default defineConfig({
   testDir: "./tests",
@@ -9,7 +22,6 @@ export default defineConfig({
   workers: 1,
   reporter: [["list"]],
   use: {
-    // The installed Google Chrome, not a downloaded Chromium build.
     headless: true,
     baseURL: "http://127.0.0.1:8765/",
     viewport: { width: 390, height: 844 },
@@ -18,7 +30,7 @@ export default defineConfig({
     // Web Audio needs a real (fake) output device; these flags give Chrome one
     // and skip the user-gesture requirement so tones are scheduled.
     launchOptions: {
-      executablePath: "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+      executablePath: browserPath(),
       args: [
         "--autoplay-policy=no-user-gesture-required",
         "--use-fake-device-for-media-stream",

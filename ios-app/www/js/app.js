@@ -1420,6 +1420,15 @@ function gsBoot() {
   gsBindNativeShortcuts();
   gsBindAndroidBack();
 
+  // Tracker 27.28: said once at start, and it stays in the banner.
+  if (window.gsStorageBlocked) {
+    const blocked = "This browser is blocking storage, so your settings and practice will not be kept after this page is closed. Allow site data for this page, or use the CrossingTime app.";
+    setTimeout(() => {
+      if (typeof setStatus === "function") setStatus(blocked, "warn");
+      if (typeof announceScreenReader === "function") announceScreenReader(blocked);
+    }, 600);
+  }
+
   // ?demo=1 — the conference link. Straight in, nothing to set up.
   const params = new URLSearchParams(window.location.search);
   const wantsDemo = params.get("demo") === "1";

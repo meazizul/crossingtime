@@ -32,6 +32,49 @@
  * Loaded before everything else; nothing here depends on the other files.
  * ============================================================ */
 
+/*
+ * Build 28 (tracker 27.28): a browser can block storage altogether (cookies
+ * and site data turned off, some private modes, an embedded page). Reading
+ * or writing localStorage then throws, and the first throw used to stop the
+ * app half-way through starting. Every part of the app reads localStorage
+ * directly, so the guard is put here, once, before anything else runs: when
+ * storage cannot be used, an in-memory stand-in takes its place for this
+ * visit. The app opens and works; nothing is kept after the page is closed,
+ * and the app says so (window.gsStorageBlocked, shown at start by app.js).
+ */
+(function gsStorageGuard() {
+  function memoryStorage() {
+    const map = new Map();
+    return {
+      get length() { return map.size; },
+      key: (index) => [...map.keys()][index] ?? null,
+      getItem: (key) => (map.has(String(key)) ? map.get(String(key)) : null),
+      setItem: (key, value) => { map.set(String(key), String(value)); },
+      removeItem: (key) => { map.delete(String(key)); },
+      clear: () => { map.clear(); }
+    };
+  }
+  function usable(name) {
+    try {
+      const storage = window[name];
+      const probe = "gs-storage-probe";
+      storage.setItem(probe, "1");
+      storage.removeItem(probe);
+      return true;
+    } catch (error) {
+      return false;
+    }
+  }
+  window.gsStorageBlocked = false;
+  ["localStorage", "sessionStorage"].forEach((name) => {
+    if (usable(name)) return;
+    try {
+      Object.defineProperty(window, name, { value: memoryStorage(), configurable: true });
+      if (name === "localStorage") window.gsStorageBlocked = true;
+    } catch (error) { /* a browser that will not let it be replaced: as before */ }
+  });
+})();
+
 (function gsStoreModule() {
   const PREFIX = "om-";
   const HISTORY_KEY = "om-attempt-log";
@@ -53,7 +96,9 @@
   const useNative = native && Preferences && Filesystem;
 
   const state = {
-    backend: useNative ? "native" : (typeof indexedDB !== "undefined" ? "indexeddb" : "none"),
+    // With storage blocked there is nothing to copy, and the browser's
+    // database is blocked with it.
+    backend: window.gsStorageBlocked ? "none" : (useNative ? "native" : (typeof indexedDB !== "undefined" ? "indexeddb" : "none")),
     lastSavedAt: 0,
     lastError: "",
     pending: false,

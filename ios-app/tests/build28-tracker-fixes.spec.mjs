@@ -570,3 +570,113 @@ test("27.31 and 27.37: an exported file is written in the reports folder and del
   // (The mock also holds the app's own history copy, which is not an export.)
   expect(Object.keys(state.files).filter((f) => /\.(csv|txt)$/.test(f))).toEqual(["something-else.txt"]);
 });
+
+/* ---------------- fifth batch: 27.28, 27.35, 27.36, 27.39, 27.42, 27.43 ---------------- */
+
+test("27.28: with the browser blocking storage the app opens, works for the visit, and says settings will not be kept", async ({ page }) => {
+  const errors = [];
+  page.on("pageerror", (e) => errors.push(e.message));
+  await page.addInitScript(() => {
+    const deny = () => { throw new DOMException("The operation is insecure.", "SecurityError"); };
+    Object.defineProperty(window, "localStorage", { get: deny, configurable: true });
+    Object.defineProperty(window, "sessionStorage", { get: deny, configurable: true });
+  });
+  await page.goto("/index.html");
+  await page.waitForFunction(() => typeof gsBoot === "function" && document.getElementById("screen-home"));
+  expect(await page.evaluate(() => window.gsStorageBlocked)).toBe(true);
+  await expect(page.locator("#cueBannerText")).toContainText("will not be kept");
+  // It works for the session: times can be set and read back.
+  const kept = await page.evaluate(() => { setReferenceTimes("4", "8", "0.4", { source: "settings" }); return [localStorage.getItem("om-full-time"), gsHasTimes()]; });
+  expect(kept).toEqual(["8", true]);
+  expect(errors).toEqual([]);
+});
+
+test("27.35: with a screen reader on, the four setting confirmations go to it and the app's own voice stays quiet", async ({ page }) => {
+  await openApp(page);
+  await page.evaluate(() => {
+    window.__spoken = [];
+    const fake = { speaking: false, cancel() {}, speak(u) { window.__spoken.push(u.text); setTimeout(() => u.onend && u.onend(), 5); }, getVoices() { return []; } };
+    Object.defineProperty(window, "speechSynthesis", { value: fake, configurable: true });
+    window.SpeechSynthesisUtterance = function (text) { this.text = text; };
+    window.__heard = [];
+    new MutationObserver((records) => records.forEach((r) => { const t = r.target.textContent.replace(/​/g, ""); if (t) window.__heard.push(t); }))
+      .observe(document.body, { subtree: true, childList: true, characterData: true, attributeFilter: [] });
+    window.__gsScreenReader = true;
+    document.getElementById("a11yModal").showModal();
+  });
+  await page.locator("#a11ySpeechRate").selectOption("1.25");
+  await page.locator("#a11yVerbosity").selectOption("high");
+  await page.locator("#a11yVoice").selectOption("phone");
+  expect(await page.evaluate(() => window.__spoken)).toEqual([]);
+  // With no screen reader they are spoken as before.
+  await page.evaluate(() => { window.__gsScreenReader = false; });
+  await page.locator("#a11ySpeechRate").selectOption("1");
+  expect(await page.evaluate(() => window.__spoken)).toEqual(["This is the speaking rate."]);
+});
+
+test("27.36: while a pop-up is open the announcement is written to the live region inside it, and to the page's announcer when none is open", async ({ page }) => {
+  await openApp(page);
+  const result = await page.evaluate(() => {
+    const out = {};
+    out.regions = [...document.querySelectorAll("dialog")].every((d) => d.querySelector(":scope > .gs-dialog-announcer[aria-live='polite']"));
+    announceScreenReader("Outside message.");
+    out.outside = document.getElementById("srAnnouncer").textContent.replace(/​/g, "");
+    const dialog = document.getElementById("a11yModal");
+    dialog.showModal();
+    announceScreenReader("Playing three test pulses: marker, acceptable, outside.");
+    out.inside = dialog.querySelector(":scope > .gs-dialog-announcer").textContent.replace(/​/g, "");
+    out.pageAnnouncer = document.getElementById("srAnnouncer").textContent.replace(/​/g, "");
+    return out;
+  });
+  expect(result).toEqual({ regions: true, outside: "Outside message.", inside: "Playing three test pulses: marker, acceptable, outside.", pageAnnouncer: "Outside message." });
+});
+
+test("27.39: on the street pad a swipe up while a vehicle is expected does nothing; tap and swipe down are the gestures", async ({ page }) => {
+  await openApp(page);
+  await setTimes(page);
+  const kinds = await page.evaluate(() => {
+    gsLiveState.phase = "arriving";
+    const overlay = document.getElementById("liveOverlay");
+    return Object.keys(gsSwipeHandlers.get(overlay)()).sort();
+  });
+  expect(kinds).toEqual(["down", "tap"]);
+});
+
+test("27.42: a pad left open ten minutes with no touch stops holding the screen on and says so; a touch holds it on again", async ({ page }) => {
+  await openApp(page);
+  await setTimes(page);
+  await page.clock.install();
+  await page.evaluate(() => {
+    window.__awake = [];
+    const real = gsKeepAwakeFor;
+    window.gsKeepAwakeFor = (reason, on) => { if (reason === "pad") window.__awake.push(on); return real(reason, on); };
+    gsOpenAnswerPad({ title: "Was it longer or shorter?", onAnswer: () => {} });
+  });
+  await page.clock.runFor(9 * 60 * 1000);
+  expect(await page.evaluate(() => window.__awake)).toEqual([true]);
+  await page.clock.runFor(61 * 1000);
+  expect(await page.evaluate(() => window.__awake)).toEqual([true, false]);
+  await expect(page.locator("#cueBannerText")).toContainText("no longer kept on");
+  await page.evaluate(() => document.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true })));
+  expect(await page.evaluate(() => window.__awake)).toEqual([true, false, true]);
+  await page.evaluate(() => gsCloseAnswerPad());
+  expect(await page.evaluate(() => window.__awake)).toEqual([true, false, true, false]);
+});
+
+test("27.43: the note after a student switch is in the banner on Instructor setup; after a setup link the student stays on Home with the message", async ({ page }) => {
+  await openApp(page);
+  await page.evaluate(() => { sessionStorage.setItem("gs-students-note", "Now showing student CD2."); });
+  await page.reload();
+  await page.waitForFunction(() => typeof gsBoot === "function");
+  await expect(page.locator("#cueBannerText")).toHaveText("Now showing student CD2.");
+  await expect(page.locator("#screen-instructor")).toBeVisible();
+  await page.evaluate(() => {
+    sessionStorage.setItem("gs-students-note", "This setup link is for student CD2. The app now shows CD2's practice, with the instructor's setup.");
+    sessionStorage.setItem("gs-students-note-where", "home");
+  });
+  await page.reload();
+  await page.waitForFunction(() => typeof gsBoot === "function");
+  await expect(page.locator("#cueBannerText")).toContainText("This setup link is for student CD2");
+  await expect(page.locator("#screen-home")).toBeVisible();
+  await expect(page.locator("#screen-instructor")).toBeHidden();
+});

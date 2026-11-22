@@ -685,6 +685,45 @@ function gsSurfaceAccessibility(surface, label) {
   }
 }
 
+/*
+ * Tracker 27.42: a pad keeps the screen on, and the street pad can be open
+ * for a long time. A phone put down and forgotten stayed lit until its
+ * battery ran out. After ten minutes with no touch or key the screen is no
+ * longer held on (the phone's own timeout takes over) and the app says so;
+ * the next touch holds it on again.
+ */
+const GS_PAD_AWAKE_MS = 10 * 60 * 1000;
+let gsPadAwakeTimer = null;
+let gsPadAwakeReleased = false;
+
+function gsPadAwakeTouch() {
+  if (!gsOpenPads) return;
+  if (gsPadAwakeReleased) {
+    gsPadAwakeReleased = false;
+    if (typeof gsKeepAwakeFor === "function") gsKeepAwakeFor("pad", true);
+  }
+  clearTimeout(gsPadAwakeTimer);
+  gsPadAwakeTimer = setTimeout(() => {
+    if (!gsOpenPads) return;
+    gsPadAwakeReleased = true;
+    if (typeof gsKeepAwakeFor === "function") gsKeepAwakeFor("pad", false);
+    const message = "Nothing has been touched for ten minutes, so the screen is no longer kept on. Touch the screen to carry on.";
+    if (typeof setStatus === "function") setStatus(message, "warn");
+    if (typeof announceScreenReader === "function") announceScreenReader(message, { force: true });
+  }, GS_PAD_AWAKE_MS);
+}
+
+function gsPadAwakeWatch(on) {
+  clearTimeout(gsPadAwakeTimer);
+  gsPadAwakeReleased = false;
+  document.removeEventListener("pointerdown", gsPadAwakeTouch, true);
+  document.removeEventListener("keydown", gsPadAwakeTouch, true);
+  if (!on) return;
+  document.addEventListener("pointerdown", gsPadAwakeTouch, true);
+  document.addEventListener("keydown", gsPadAwakeTouch, true);
+  gsPadAwakeTouch();
+}
+
 function gsShowPad(el, { opener = document.activeElement } = {}) {
   if (!el || !el.hidden) return;
   el.gsOpener = opener && opener !== document.body ? opener : null;
@@ -692,6 +731,7 @@ function gsShowPad(el, { opener = document.activeElement } = {}) {
   gsOpenPads += 1;
   gsPadStackSync();
   if (gsOpenPads === 1 && typeof gsKeepAwakeFor === "function") gsKeepAwakeFor("pad", true);
+  if (gsOpenPads === 1) gsPadAwakeWatch(true);
   gsDirectTouchSync({ focus: true });
   if (typeof setMainContentInert === "function") setMainContentInert(true);
   document.body.classList.add("pad-open");
@@ -714,6 +754,7 @@ function gsHidePad(el, { focusTo = null } = {}) {
   gsOpenPads = Math.max(0, gsOpenPads - 1);
   if (!gsOpenPads) {
     if (typeof gsKeepAwakeFor === "function") gsKeepAwakeFor("pad", false);
+    gsPadAwakeWatch(false);
     document.body.classList.remove("pad-open");
     const dialogOpen = [...document.querySelectorAll("dialog")].some((d) => d.open);
     if (!dialogOpen && typeof setMainContentInert === "function") setMainContentInert(false);
@@ -2228,7 +2269,11 @@ function gsComparisonInit() {
         return { left: (at) => gsLiveDetect("left", at), right: (at) => gsLiveDetect("right", at) };
       }
       if (gsLiveState.phase === "arriving") {
-        return { tap: (at) => gsLiveArrived(at), up: (at) => gsLiveArrived(at), down: gsLiveNeverCame };
+        // Tracker 27.39: a swipe up used to count as "it passed in front of
+        // me", though no screen said so. A thumb dragged up to settle the
+        // grip ended the vehicle's timing early. Tap, and swipe down for
+        // "it never came", are the two gestures the pad describes.
+        return { tap: (at) => gsLiveArrived(at), down: gsLiveNeverCame };
       }
       return {};
     });

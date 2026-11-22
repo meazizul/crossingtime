@@ -197,7 +197,10 @@ function gsStudentChangedElsewhere() {
 function gsStudentMismatchReload(message) {
   if (gsTabStudentReloading) return;
   gsTabStudentReloading = true;
-  try { sessionStorage.setItem("gs-students-note", message); } catch (error) { /* ignore */ }
+  try {
+    sessionStorage.setItem("gs-students-note", message);
+    sessionStorage.setItem("gs-students-note-where", "home");
+  } catch (error) { /* ignore */ }
   if (typeof window.__gsStudentsReload === "function") window.__gsStudentsReload();
   else window.location.reload();
 }
@@ -372,11 +375,13 @@ function gsStudentsRouteSetupLink(code) {
     // to let the caller apply the link to whoever was open, putting one
     // student's crossing times, margin and contacts on another. The link is
     // now refused, nothing is changed, and the reason is said.
+    try { sessionStorage.setItem("gs-students-note-where", "home"); } catch (error) { /* ignore */ }
     const why = result.message || GS_STUDENTS_FULL;
     gsStudentsLinkRefusal = `This setup link is for student ${clean}, and this phone could not ${owner ? "switch to" : "add"} that student. ${why} Nothing was changed: the student now open keeps their own crossing times.`;
     try { sessionStorage.setItem("gs-students-note", gsStudentsLinkRefusal); } catch (error) { /* ignore */ }
     return "refused";
   }
+  try { sessionStorage.setItem("gs-students-note-where", "home"); } catch (error) { /* ignore */ }
   gsStudentsCommitAndReload(message);
   return true;
 }
@@ -567,11 +572,23 @@ function gsBindStudents() {
     note = sessionStorage.getItem("gs-students-note") || "";
     sessionStorage.removeItem("gs-students-note");
   } catch (error) { /* ignore */ }
+  // Tracker 27.43: where the note is shown. After a setup link the student
+  // stays on Home (it is the student who taps the link, and Instructor
+  // setup may be locked). After a switch, an add or a removal the
+  // instructor is taken back to Instructor setup as before, and the note
+  // is also put in the banner at the top of the screen, which is visible
+  // even when Instructor setup shows only its lock.
+  let noteWhere = "";
+  try {
+    noteWhere = sessionStorage.getItem("gs-students-note-where") || "";
+    sessionStorage.removeItem("gs-students-note-where");
+  } catch (error) { /* ignore */ }
   if (note) {
     window.__gsStudentsAfterReload = note;
     setTimeout(() => {
-      if (typeof gsShowScreen === "function") gsShowScreen("instructor");
+      if (noteWhere !== "home" && typeof gsShowScreen === "function") gsShowScreen("instructor");
       gsStudentsNote(note);
+      if (typeof setStatus === "function") setStatus(note);
     }, 300);
   }
 }

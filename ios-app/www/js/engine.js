@@ -2558,6 +2558,28 @@
      * correct answer. A zero-width space is toggled on alternate calls so an
      * identical message still counts as a change and is re-announced.
      */
+    /* One live region inside every pop-up, made at start so that it exists
+     * before anything is written to it (a region created with its text
+     * already in it is not announced). Returns the region of the pop-up on
+     * top, or null when none is open. */
+    function gsDialogAnnouncers() {
+      document.querySelectorAll("dialog").forEach((dialog) => {
+        if (dialog.querySelector(":scope > .gs-dialog-announcer")) return;
+        const region = document.createElement("div");
+        region.className = "sr-only gs-dialog-announcer";
+        region.setAttribute("aria-live", "polite");
+        region.setAttribute("aria-atomic", "true");
+        dialog.appendChild(region);
+      });
+    }
+    gsDialogAnnouncers();
+
+    function gsDialogAnnouncer() {
+      const open = [...document.querySelectorAll("dialog")].filter((d) => d.open);
+      const top = open[open.length - 1];
+      return top ? top.querySelector(":scope > .gs-dialog-announcer") : null;
+    }
+
     let srAnnounceToggle = false;
     let srAnnounceClearTimer = null;
     function announceScreenReader(message, { force = false, speak = true } = {}) {
@@ -2575,6 +2597,20 @@
       if (speak && gsSelfVoiceOn() && !started) gsSpeak(message);
       if (!a11ySettings.announceCues) return;
       srAnnounceToggle = !srAnnounceToggle;
+      // Tracker 27.36: while a pop-up is open, the words go to the live
+      // region inside it. A pop-up opened as a modal tells the screen reader
+      // to ignore everything outside it, the page's own announcer included
+      // (WebKit bug 276553), so the sound test result, "Playing three test
+      // pulses" and the setting messages were not read.
+      const inDialog = gsDialogAnnouncer();
+      if (inDialog) {
+        inDialog.textContent = srAnnounceToggle ? message : `${message}​`;
+        clearTimeout(inDialog.gsClearTimer);
+        inDialog.gsClearTimer = setTimeout(() => {
+          if (inDialog.textContent.replace(/\u200b/g, "") === message) inDialog.textContent = "";
+        }, 4000);
+        return;
+      }
       srAnnouncer.textContent = srAnnounceToggle ? message : `${message}​`;
       // The live region sits after every screen in the page. While it holds
       // text, a VoiceOver user swiping past the last control lands on it and
@@ -2907,6 +2943,21 @@
         if (gsSpeechUnavailable && announce) announceScreenReader(GS_NO_VOICE, { force: true, speak: false });
       }).catch(() => {});
       ask(4);
+    }
+
+    /* Tracker 27.35: the spoken confirmation of a setting in Accessibility.
+     * With VoiceOver or TalkBack running the app does not use its own voice
+     * (it talked over the screen reader, which was reading the control that
+     * had just changed); the words go to the screen reader instead. With no
+     * screen reader it is spoken as before, so the student hears the new
+     * rate or voice at once. */
+    function gsConfirmSetting(text) {
+      if (!text) return;
+      if (gsScreenReaderOn()) {
+        announceScreenReader(text, { force: true, speak: false });
+        return;
+      }
+      gsSpeak(text);
     }
 
     /* The phone's own voice: any text at all. */
@@ -4137,14 +4188,14 @@
     a11yVoice?.addEventListener("change", () => {
       gsSetVoice(a11yVoice.value);
       gsStopSpeech();
-      gsSpeak("This is the voice.");
+      gsConfirmSetting("This is the voice.");
     });
 
     a11ySpeechRate?.addEventListener("change", () => {
       const rate = Number(a11ySpeechRate.value);
       a11ySettings.speechRate = [0.8, 1, 1.25].includes(rate) ? rate : 1;
       localStorage.setItem("om-a11y-speech-rate", String(a11ySettings.speechRate));
-      gsSpeak("This is the speaking rate.");
+      gsConfirmSetting("This is the speaking rate.");
     });
 
     /* Verbosity (build 20, Cindi 1 Nov 2026): High, Medium (what builds 15-19
@@ -4163,20 +4214,20 @@
       if (a11yDescribeSounds) a11yDescribeSounds.checked = more;
       GS_RESULTS_WORDS_ACTIVITIES.forEach((name) => localStorage.removeItem(`om-a11y-describe-${name}`));
       gsRenderResultsWordsSwitches();
-      gsSpeak({ high: "Verbosity high.", medium: "Verbosity medium.", low: "Verbosity low." }[level]);
+      gsConfirmSetting({ high: "Verbosity high.", medium: "Verbosity medium.", low: "Verbosity low." }[level]);
     });
 
     a11ySayReplay?.addEventListener("change", () => {
       a11ySettings.sayReplay = a11ySayReplay.checked;
       localStorage.setItem("om-a11y-say-replay", String(a11ySettings.sayReplay));
-      if (a11ySettings.sayReplay) gsSpeak("Replay");
+      if (a11ySettings.sayReplay) gsConfirmSetting("Replay");
     });
 
     a11yDescribeSounds?.addEventListener("change", () => {
       a11ySettings.describeSounds = a11yDescribeSounds.checked;
       localStorage.setItem("om-a11y-describe-sounds", String(a11ySettings.describeSounds));
       gsRenderResultsWordsSwitches();
-      if (a11ySettings.describeSounds) gsSpeak("The app will announce results and describe the sounds.");
+      if (a11ySettings.describeSounds) gsConfirmSetting("The app will announce results and describe the sounds.");
     });
 
     // Build 27 (tracker F12): choose it here for every activity, or on each
