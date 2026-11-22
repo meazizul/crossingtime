@@ -1014,6 +1014,12 @@ async function gsConfirmDeleteHistory() {
   // cannot be written, the app says so; the deletion stays marked, so the
   // old history is never restored, and the copy is rewritten at a later
   // start.
+  // Tracker 27.38: so does any old record of this student's history from a
+  // time when they were not the student in use.
+  try {
+    const activeId = typeof gsActiveStudentIdNow === "function" ? gsActiveStudentIdNow() : "";
+    if (activeId && window.gsStore?.deleteStudentHistory) await window.gsStore.deleteStudentHistory(activeId);
+  } catch (error) { /* none there */ }
   // Tracker 27.37: report and CSV files exported earlier go too.
   try { if (typeof gsClearExports === "function") await gsClearExports(); } catch (error) { /* none left to clear */ }
   let durable = true;

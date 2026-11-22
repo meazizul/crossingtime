@@ -169,6 +169,73 @@
     await idbSet(HISTORY_KEY, history || "[]");
   }
 
+  /* ---------------- one record for each waiting student's history ----------------
+   *
+   * Build 28 (tracker 27.38). A phone with several students kept every
+   * waiting student's whole practice history (up to 5,000 tries each) inside
+   * one settings value, om-students. That value was held in the web view's
+   * storage, which has a limit, and copied into the phone's Preferences,
+   * which are meant for small values. With a few busy students, saving a
+   * try or adding a student could fail with "storage full" long before any
+   * history limit was reached.
+   *
+   * A waiting student's history is now its own record: a file in the app's
+   * data folder on iPhone and Android, an entry in the browser's database on
+   * the web. om-students keeps only a small index (students.js). The
+   * history comes back into the web view's storage only while that student
+   * is the one in use.
+   */
+  const STUDENT_FOLDER = "gapsense/students";
+  const studentRecord = (id) => {
+    if (!/^[a-z0-9]{3,40}$/i.test(String(id || ""))) throw new Error("not a student id");
+    return String(id);
+  };
+
+  async function loadStudentHistory(id) {
+    const name = studentRecord(id);
+    if (state.backend === "none") return null;
+    if (useNative) {
+      try {
+        const file = await Filesystem.readFile({ path: `${STUDENT_FOLDER}/${name}.json`, directory: "DATA", encoding: "utf8" });
+        return typeof file?.data === "string" ? file.data : null;
+      } catch (error) {
+        return null;
+      }
+    }
+    const value = await idbGet(`student-history:${name}`);
+    return typeof value === "string" ? value : null;
+  }
+
+  /* Writes the record and reads it back: resolves only when what is stored
+   * is exactly what was given. */
+  async function saveStudentHistory(id, json) {
+    const name = studentRecord(id);
+    if (typeof json !== "string") throw new Error("not a history");
+    if (state.backend === "none") throw new Error("no durable storage");
+    if (useNative) {
+      await Filesystem.writeFile({ path: `${STUDENT_FOLDER}/${name}.json`, directory: "DATA", data: json, encoding: "utf8", recursive: true });
+    } else {
+      await idbSet(`student-history:${name}`, json);
+    }
+    const back = await loadStudentHistory(name);
+    if (back !== json) throw new Error("the record did not read back");
+  }
+
+  async function deleteStudentHistory(id) {
+    const name = studentRecord(id);
+    if (state.backend === "none") return;
+    if (useNative) {
+      try { await Filesystem.deleteFile({ path: `${STUDENT_FOLDER}/${name}.json`, directory: "DATA" }); } catch (error) { /* none there */ }
+      return;
+    }
+    await openDb().then((db) => new Promise((resolve, reject) => {
+      const tx = db.transaction("kv", "readwrite");
+      tx.objectStore("kv").delete(`student-history:${name}`);
+      tx.oncomplete = () => { resolve(); db.close(); };
+      tx.onerror = () => { reject(tx.error); db.close(); };
+    }));
+  }
+
   /* ---------------- what to copy ---------------- */
 
   function snapshot() {
@@ -344,6 +411,11 @@
       return { durable: !deletionPending() };
     },
     deletionPending,
+    /* A waiting student's practice history, as its own record (27.38). */
+    loadStudentHistory,
+    saveStudentHistory,
+    deleteStudentHistory,
+    canKeepStudentRecords: () => state.backend !== "none",
     /* Switching or removing a student (build 20): the new state goes to the
      * copy now, before the app starts again, and is never replaced by the
      * old copy on the next load. */
