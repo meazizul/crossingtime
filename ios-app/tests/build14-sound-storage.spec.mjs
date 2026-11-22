@@ -43,15 +43,22 @@ test("12.34: the steady sound dips while the student's sound plays over it, and 
   const result = await page.evaluate(async () => {
     const rate = 44100;
     const offline = new OfflineAudioContext(1, rate * 3, rate);
-    const saved = [audioContext, masterLimiter];
+    const saved = [audioContext, masterLimiter, cueOutput];
     audioContext = offline;
     masterLimiter = offline.createGain();
     masterLimiter.connect(offline.destination);
+    // Build 28: the student's sound is a recording now. It is left out of
+    // this render (its output goes nowhere) so the level measured is the
+    // steady sound's alone; build28-sounds-voice.spec.mjs renders the two
+    // together through the real output chain.
+    cueOutput = offline.createGain();
     playCompositeTone.retrying = true;
+    gsPlayCue.retrying = true;
     playCompositeTone(gsSamplePartials(), 2.0, 0.1, gsSampleLevel(), "steady");   // the sample, 0.1 to 2.1 s
     playUserMarkerTone(1.0);                                                          // the student's sound at 1.0 s
     playCompositeTone.retrying = false;
-    [audioContext, masterLimiter] = saved;
+    gsPlayCue.retrying = false;
+    [audioContext, masterLimiter, cueOutput] = saved;
     const data = (await offline.startRendering()).getChannelData(0);
     // Goertzel at the sample's base pitch: how loud the sample is in a window.
     const level = (from, to, hz) => {

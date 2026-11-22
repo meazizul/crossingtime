@@ -1,0 +1,133 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>CrossingTime: listen to the new sounds and voice</title>
+<style>
+  :root { color-scheme: light dark; --bg: #f6f7f9; --card: #ffffff; --ink: #14181f; --soft: #56606e; --line: #d5dae1; --go: #0b5cad; --goink: #ffffff; }
+  @media (prefers-color-scheme: dark) { :root { --bg: #11151b; --card: #1a2029; --ink: #eef1f5; --soft: #a4aebb; --line: #2e3744; --go: #6db3ff; --goink: #0a1a2c; } }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 17px/1.5 -apple-system, "Segoe UI", Roboto, sans-serif; }
+  main { max-width: 860px; margin: 0 auto; padding: 24px 16px 60px; }
+  h1 { font-size: 1.6rem; margin: 0 0 4px; } h2 { font-size: 1.2rem; margin: 34px 0 6px; }
+  p { margin: 6px 0 12px; color: var(--soft); }
+  table { width: 100%; border-collapse: collapse; background: var(--card); border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
+  th, td { text-align: left; padding: 10px 12px; border-bottom: 1px solid var(--line); vertical-align: middle; }
+  th { font-size: .85rem; color: var(--soft); font-weight: 600; } tr:last-child td { border-bottom: 0; }
+  button { font: inherit; font-weight: 600; padding: 8px 14px; border-radius: 8px; border: 1px solid var(--go); background: var(--go); color: var(--goink); cursor: pointer; min-width: 92px; }
+  button.plain { background: transparent; color: var(--go); }
+  button:focus-visible { outline: 3px solid var(--ink); outline-offset: 2px; }
+  .row { display: flex; flex-wrap: wrap; gap: 8px; margin: 8px 0 14px; }
+  .scroll { overflow-x: auto; }
+  small { color: var(--soft); }
+</style>
+</head>
+<body>
+<main>
+  <h1>CrossingTime build 28: listen</h1>
+  <p>Everything here is what the app itself will play. Press a button to hear it. Nothing is sent anywhere; the page only plays files from this folder.</p>
+
+  <h2>1. Right, wrong and your own sound</h2>
+  <p>"Classic" is the plain tone used up to build 27. "Bright" (the new default) and "Warm" are the two new styles. In each new style, the wrong sound A opens low and the right sound opens higher, so they differ from the first note.</p>
+  <div class="scroll"><table id="cues"><thead><tr><th>Sound</th><th>Classic (old)</th><th>Bright (new default)</th><th>Warm (new)</th></tr></thead><tbody></tbody></table></div>
+
+  <h2>2. The warning-time sound (the steady sound that is timed)</h2>
+  <p>The old one was two plain tones together, which is why it sounded like a telephone dial tone. The new one is a single note with its own overtones, steady from start to end. Each button plays 3 seconds.</p>
+  <div class="scroll"><table id="steady"><thead><tr><th>Pitch setting</th><th>Classic (old)</th><th>New</th></tr></thead><tbody></tbody></table></div>
+
+  <h2>3. A whole replay, old and new</h2>
+  <p>A 4-second warning sound, your own sound at 3.2 seconds, and the result at 4 seconds.</p>
+  <div class="row">
+    <button data-replay="classic" class="plain">Old: within the margin</button>
+    <button data-replay="bright">Bright: within the margin</button>
+    <button data-replay="warm">Warm: within the margin</button>
+    <button data-replay="bright" data-wrong="1">Bright: outside the margin</button>
+    <button data-replay="warm" data-wrong="1">Warm: outside the margin</button>
+  </div>
+
+  <h2>4. The voice</h2>
+  <p>"Natural" is the new recorded voice (the same voice as the SOMA demo video). "This computer's voice" is the built-in voice of the device, which is what the app used until now; on an iPhone it is the robotic one.</p>
+  <div class="scroll"><table id="voice"><thead><tr><th>What the app says</th><th>Natural (new)</th><th>This computer's voice</th></tr></thead><tbody></tbody></table></div>
+  <p><small>A sentence with a number or a name in it (for example "You were 0.4 seconds early") cannot be recorded ahead of time, so the app still says those with the phone's voice.</small></p>
+</main>
+<script>
+const SOUNDS = "../www/sounds/", VOICE = "../www/voice/";
+let ctx = null;
+const audio = () => (ctx = ctx || new (window.AudioContext || window.webkitAudioContext)());
+const players = {};
+function playFile(url, at = 0) {
+  const el = players[url] || (players[url] = new Audio(url));
+  setTimeout(() => { el.currentTime = 0; el.play(); }, at * 1000);
+}
+function tone(partials, seconds, at = 0, steady = false) {
+  const c = audio(); const t = c.currentTime + at + 0.02;
+  const g = c.createGain(); g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(0.8, t + (steady ? 0.006 : 0.01));
+  if (steady) g.gain.setValueAtTime(0.8, t + seconds);
+  g.gain.linearRampToValueAtTime(0, t + seconds + (steady ? 0.012 : 0.07));
+  partials.forEach(([f, a]) => { const o = c.createOscillator(); const og = c.createGain(); o.frequency.value = f; og.gain.value = a; o.connect(og).connect(g); o.start(t); o.stop(t + seconds + 0.1); });
+  g.connect(c.destination);
+}
+const CLASSIC = {
+  "right-a": [[[659, 0.55], [823, 0.25]], 0.12], "right-b": [[[523, 0.55], [659, 0.25]], 0.12],
+  "wrong-a": [[[330, 0.42], [349, 0.38]], 0.3], "wrong-b": [[[294, 0.42], [311, 0.38]], 0.3],
+  "marker": [[[1047, 0.6], [1570, 0.22]], 0.14], "confirm": [[[350, 0.5], [700, 0.22]], 0.18], "reference": [[[494, 0.5], [988, 0.18]], 0.05]
+};
+const ROLES = [["right-a", "Right sound A (within the margin)"], ["right-b", "Right sound B"], ["wrong-a", "Wrong sound A (outside the margin)"], ["wrong-b", "Wrong sound B"], ["marker", "Your own sound (your tap)"], ["confirm", "Button chime"], ["reference", "The real crossing time"]];
+function cue(style, role, at = 0) {
+  if (style === "classic") { const [p, d] = CLASSIC[role]; tone(p, d, at); if (role === "reference") tone(p, d, at + 0.11); }
+  else playFile(`${SOUNDS}${style}/${role}.wav`, at);
+}
+const cues = document.querySelector("#cues tbody");
+ROLES.forEach(([role, label]) => {
+  const tr = document.createElement("tr");
+  tr.innerHTML = `<td>${label}</td>` + ["classic", "bright", "warm"].map((s) => `<td><button class="${s === "classic" ? "plain" : ""}" data-style="${s}" data-role="${role}" aria-label="Play ${label}, ${s}">Play</button></td>`).join("");
+  cues.appendChild(tr);
+});
+cues.addEventListener("click", (e) => { const b = e.target.closest("button"); if (b) cue(b.dataset.style, b.dataset.role); });
+
+const PITCHES = [[165, "Lowest"], [220, "Low"], [294, "Medium low"], [392, "Medium (default)"], [523, "High"]];
+const oldSteady = (hz) => [[hz, 0.55], [hz * 1.189, hz < 250 ? 0.38 : 0.3]];
+const newSteady = (hz) => (hz < 250 ? [0.4, 0.22, 0.12, 0.06] : [0.5, 0.18, 0.08, 0.04]).map((g, i) => [hz * (i + 1), g]);
+const steady = document.querySelector("#steady tbody");
+PITCHES.forEach(([hz, label]) => {
+  const tr = document.createElement("tr");
+  tr.innerHTML = `<td>${label}</td><td><button class="plain" data-hz="${hz}" data-kind="old" aria-label="Play classic warning sound, ${label}">Play</button></td><td><button data-hz="${hz}" data-kind="new" aria-label="Play new warning sound, ${label}">Play</button></td>`;
+  steady.appendChild(tr);
+});
+steady.addEventListener("click", (e) => { const b = e.target.closest("button"); if (b) tone((b.dataset.kind === "old" ? oldSteady : newSteady)(Number(b.dataset.hz)), 3, 0, true); });
+
+document.querySelectorAll("[data-replay]").forEach((b) => b.addEventListener("click", () => {
+  const style = b.dataset.replay; const wrong = Boolean(b.dataset.wrong);
+  tone((style === "classic" ? oldSteady : newSteady)(392), 4, 0.5, true);
+  cue(style, "marker", 0.5 + (wrong ? 2.4 : 3.7));
+  cue(style, wrong ? "wrong-a" : "right-a", 4.5);
+}));
+
+const SAY = ["Get ready.", "Replay.", "Correct.", "Not correct. It was longer.", "Within the margin.", "Outside the margin.",
+  "That was your taps, then the crossing time: within the margin. Ready for another try.",
+  "That was the sample warning time, then your own sound where your crossing time ends.", "Ready for the next vehicle."];
+const SENTENCE = /\S.*?(?:[.!?…]+(?=\s|$)|$)/g;
+const key = (s) => s.replace(/\s+/g, " ").trim().replace(/[.!…]+$/, "").trim().toLowerCase();
+let manifest = null;
+fetch(`${VOICE}manifest.json`).then((r) => r.json()).then((d) => { manifest = d.clips; }).catch(() => {});
+const voice = document.querySelector("#voice tbody");
+SAY.forEach((text, i) => {
+  const tr = document.createElement("tr");
+  tr.innerHTML = `<td>${text}</td><td><button data-say="${i}" data-kind="natural" aria-label="Play natural voice: ${text}">Play</button></td><td><button class="plain" data-say="${i}" data-kind="phone" aria-label="Play this computer's voice: ${text}">Play</button></td>`;
+  voice.appendChild(tr);
+});
+const speaker = new Audio();
+voice.addEventListener("click", (e) => {
+  const b = e.target.closest("button"); if (!b) return;
+  const text = SAY[Number(b.dataset.say)];
+  speechSynthesis.cancel(); speaker.pause();
+  if (b.dataset.kind === "phone") { const u = new SpeechSynthesisUtterance(text); u.lang = "en-US"; speechSynthesis.speak(u); return; }
+  if (!manifest) { alert("Open this page through the local address given in the notes, not as a file, so it can read the list of recordings."); return; }
+  const files = (text.match(SENTENCE) || []).map((s) => manifest[key(s)]);
+  let i = 0;
+  const next = () => { if (i >= files.length) return; speaker.src = `${VOICE}${files[i]}.mp3`; i += 1; speaker.onended = next; speaker.play(); };
+  next();
+});
+</script>
+</body>
+</html>

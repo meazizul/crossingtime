@@ -69,6 +69,9 @@ public class GSNativePlugin: CAPPlugin, CAPBridgedPlugin {
         CAPPluginMethod(name: "sustainStop", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "stopSound", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "audioStatus", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "cue", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "cueList", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "speakClips", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "speak", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "stopSpeaking", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "pendingScreen", returnType: CAPPluginReturnPromise),
@@ -203,6 +206,25 @@ public class GSNativePlugin: CAPPlugin, CAPBridgedPlugin {
         call.resolve(["id": id])
     }
 
+    /// cue (build 28): one of the recorded sounds, "bright/right-a".
+    @objc func cue(_ call: CAPPluginCall) {
+        let played = GSAudio.shared.cue(
+            name: call.getString("name") ?? "",
+            delay: call.getDouble("delay") ?? 0,
+            level: call.getFloat("level") ?? 1,
+            rate: call.getDouble("rate") ?? 1
+        )
+        call.resolve(["played": played])
+    }
+
+    /// cueList (build 28): the recordings this copy of the app holds.
+    @objc func cueList(_ call: CAPPluginCall) {
+        DispatchQueue.global(qos: .userInitiated).async {
+            GSAudio.shared.preloadCues()
+            call.resolve(["names": GSAudio.shared.cueNames()])
+        }
+    }
+
     @objc func sustainStart(_ call: CAPPluginCall) {
         let id = GSAudio.shared.startSustained(partials: partials(call), level: call.getFloat("level") ?? 1)
         call.resolve(["id": id])
@@ -229,12 +251,31 @@ public class GSNativePlugin: CAPPlugin, CAPBridgedPlugin {
         let rate = call.getFloat("rate") ?? 1
         let interrupt = call.getBool("interrupt") ?? true
         DispatchQueue.main.async {
+            if interrupt { GSVoiceClips.shared.stop() }
             GSSpeech.shared.speak(text, rate: rate, interrupt: interrupt) { call.resolve() }
         }
     }
 
+    /// speakClips (build 28): recorded sentences in a natural voice, by file
+    /// name. Resolves with completed: false when a file is missing or it was
+    /// stopped; the page then decides whether to speak the words instead.
+    @objc func speakClips(_ call: CAPPluginCall) {
+        let files = (call.getArray("files") ?? []).compactMap { $0 as? String }
+        let rate = call.getFloat("rate") ?? 1
+        let interrupt = call.getBool("interrupt") ?? true
+        DispatchQueue.main.async {
+            if interrupt { GSSpeech.shared.stop() }
+            GSVoiceClips.shared.play(files: files, rate: rate) { completed in
+                call.resolve(["completed": completed])
+            }
+        }
+    }
+
     @objc func stopSpeaking(_ call: CAPPluginCall) {
-        DispatchQueue.main.async { GSSpeech.shared.stop() }
+        DispatchQueue.main.async {
+            GSSpeech.shared.stop()
+            GSVoiceClips.shared.stop()
+        }
         call.resolve()
     }
 

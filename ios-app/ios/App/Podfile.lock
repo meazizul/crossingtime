@@ -1,9 +1,9 @@
 PODS:
-  - Capacitor (7.6.8):
+  - Capacitor (7.6.9):
     - CapacitorCordova
   - CapacitorApp (7.1.2):
     - Capacitor
-  - CapacitorCordova (7.6.8)
+  - CapacitorCordova (7.6.9)
   - CapacitorFilesystem (7.1.9):
     - Capacitor
     - IONFilesystemLib (~> 1.1.4)
@@ -55,9 +55,9 @@ EXTERNAL SOURCES:
     :path: "../../node_modules/@capacitor/status-bar"
 
 SPEC CHECKSUMS:
-  Capacitor: ff6bf01336ac353098378828aff465095a89e459
+  Capacitor: 46067d1c8df89760dbed78780d436327d588c726
   CapacitorApp: f01a913211780e0718dae9750442c3e23f96e106
-  CapacitorCordova: e61ee8c40101b8cd011d0224261606a290c082cf
+  CapacitorCordova: 2080fc0d6bfbc9dcc0e6d88e77fa624190d343ca
   CapacitorFilesystem: 35da521d3fc5159ecaf4ae0b877ec3db7f4adb0d
   CapacitorHaptics: 1b145fa83c622e5383a3bac04ea81e2514f0b0f5
   CapacitorPreferences: 69d9991307507aeab8ef8019c10b9babfda0e9ca

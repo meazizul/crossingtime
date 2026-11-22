@@ -11,7 +11,7 @@ export function watchErrors(page) {
 }
 
 /** Open the app fresh: clear storage, mark the tutorial seen, reload. */
-export async function openApp(page, { query = "", tutorialSeen = true, disclaimerSeen = true, storage = {}, locked = false } = {}) {
+export async function openApp(page, { query = "", tutorialSeen = true, disclaimerSeen = true, storage = {}, locked = false, voice = "phone" } = {}) {
   await page.goto(`/index.html${query}`);
   // No service worker between tests: a cache-first worker would serve stale
   // files after an edit and hide the very bugs these tests look for.
@@ -21,18 +21,23 @@ export async function openApp(page, { query = "", tutorialSeen = true, disclaime
     const keys = await caches.keys();
     await Promise.all(keys.map((k) => caches.delete(k)));
   });
-  await page.evaluate(async ({ tutorialSeen, disclaimerSeen, storage, locked }) => {
+  await page.evaluate(async ({ tutorialSeen, disclaimerSeen, storage, locked, voice }) => {
     localStorage.clear();
     if (tutorialSeen) localStorage.setItem("om-tutorial-seen", "true");
     if (disclaimerSeen) localStorage.setItem("om-disclaimer-ack", "true");
     // Build 19: the session code is entered once; tests start past it.
     sessionStorage.removeItem("gs-session-unlocked");
     if (!locked) localStorage.setItem("om-session-unlock", JSON.stringify({ code: "tester", at: "test" }));
+    // Build 28: the app speaks from recordings by default. The tests written
+    // before it listen through a stand-in for the phone's voice, so they
+    // start on "This phone's own voice"; build28-sounds-voice.spec.mjs
+    // tests the recorded voice (voice: "natural").
+    if (voice !== "natural") localStorage.setItem("om-voice", "phone");
     Object.entries(storage).forEach(([k, v]) => localStorage.setItem(k, v));
     // Build 14: the durable copy (store.js) follows; written now so the next
     // load starts from exactly this state.
     if (window.gsStore?.syncNow) await window.gsStore.syncNow();
-  }, { tutorialSeen, disclaimerSeen, storage, locked });
+  }, { tutorialSeen, disclaimerSeen, storage, locked, voice });
   await page.goto(`/index.html${query}`);
   await page.waitForFunction(() => typeof gsBoot === "function" && document.getElementById("screen-home"));
 }

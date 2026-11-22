@@ -191,6 +191,16 @@ function gsSetSamplePitchIndex(index) {
  * under full scale. */
 function gsSamplePartials() {
   const base = GS_SAMPLE_PITCHES[gsSamplePitchIndex()].hz;
+  // Build 28 (tracker F14): one note with its own overtones (2, 3 and 4
+  // times the pitch), like a held organ or reed note. The two plain tones a
+  // minor third apart of earlier builds sounded like a telephone dial tone;
+  // they stay as the "Classic" style. Every overtone is locked to the note,
+  // so the sound stays perfectly steady: no beat or pulse to count by.
+  if (typeof gsSoundStyle === "function" && gsSoundStyle() !== "classic") {
+    const low = base < 250;
+    const gains = low ? [0.4, 0.22, 0.12, 0.06] : [0.5, 0.18, 0.08, 0.04];
+    return gains.map((gain, i) => ({ freq: base * (i + 1), gain }));
+  }
   const upper = base < 250 ? 0.38 : 0.3;
   return [{ freq: base, gain: 0.55 }, { freq: base * 1.189, gain: upper }];
 }

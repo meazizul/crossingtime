@@ -53,6 +53,7 @@
     const a11yDescribeSounds = document.getElementById("a11yDescribeSounds");
     const a11yDescribeWhere = document.getElementById("a11yDescribeWhere");
     const a11ySpeechRate = document.getElementById("a11ySpeechRate");
+    const a11yVoice = document.getElementById("a11yVoice");
     const soundTestBtn = document.getElementById("soundTestBtn");
     const soundTestNote = document.getElementById("soundTestNote");
     const textSetupBtn = document.getElementById("textSetupBtn");
@@ -76,6 +77,7 @@
     const acceptableInputs = [...document.querySelectorAll("input[name='acceptableSound']")];
     const outsideInputs = [...document.querySelectorAll("input[name='outsideSound']")];
     const previewButtons = [...document.querySelectorAll(".preview-btn")];
+    const soundStyleInputs = [...document.querySelectorAll("input[name='soundStyle']")];
     const exemplarButtons = [...document.querySelectorAll(".exemplar-btn")];
     const visualPreviewButtons = [...document.querySelectorAll(".visual-preview-btn")];
     const outsideVisualVariantInputs = [...document.querySelectorAll("input[name='outsideVisualVariant']")];
@@ -126,6 +128,7 @@
       a11ySayReplay,
       a11yDescribeSounds,
       a11ySpeechRate,
+      a11yVoice,
       soundTestBtn,
       hapticsTestBtn,
       ...outputModeInputs
@@ -577,24 +580,28 @@
     const feedbackOptions = {
       acceptable: {
         "acceptable-a": {
-          label: "Chime A",
+          label: "Right sound A",
+          sample: "right-a",
           duration: SOUND_FALLBACK_TONES["acceptable-a"].duration,
           partials: SOUND_FALLBACK_TONES["acceptable-a"].partials
         },
         "acceptable-b": {
-          label: "Chime B",
+          label: "Right sound B",
+          sample: "right-b",
           duration: SOUND_FALLBACK_TONES["acceptable-b"].duration,
           partials: SOUND_FALLBACK_TONES["acceptable-b"].partials
         }
       },
       outside: {
         "outside-a": {
-          label: "Low Pulse A",
+          label: "Wrong sound A",
+          sample: "wrong-a",
           duration: SOUND_FALLBACK_TONES["outside-a"].duration,
           partials: SOUND_FALLBACK_TONES["outside-a"].partials
         },
         "outside-b": {
-          label: "Low Pulse B",
+          label: "Wrong sound B",
+          sample: "wrong-b",
           duration: SOUND_FALLBACK_TONES["outside-b"].duration,
           partials: SOUND_FALLBACK_TONES["outside-b"].partials
         }
@@ -603,14 +610,167 @@
 
     const userSoundOptions = {
       marker: {
+        sample: "marker",
         duration: SOUND_FALLBACK_TONES["user-marker"].duration,
         partials: SOUND_FALLBACK_TONES["user-marker"].partials
       },
       confirm: {
+        sample: "confirm",
         duration: SOUND_FALLBACK_TONES["user-confirm"].duration,
         partials: SOUND_FALLBACK_TONES["user-confirm"].partials
       }
     };
+
+    /*
+     * Build 28 (tracker F14): designed sounds.
+     *
+     * Cindi asked for the standard of a professionally designed interface
+     * sound: polished, easy to hear, a clear start and end, and right and
+     * wrong told apart from the first moment. The short cues are now
+     * recordings from the public-domain UI SFX set (see www/sounds/
+     * LICENSE.md), in two styles, with the tones of builds 1 to 27 kept as
+     * "Classic". Each recording starts on its first sample, so a cue still
+     * lands on the exact moment it is scheduled for.
+     *
+     *   right-a / right-b    three notes going up
+     *   wrong-a              a low double knock (low from the first moment)
+     *   wrong-b              one bright note, then two falling
+     *   marker               the student's own tap
+     *   confirm              one clear note (the button chime)
+     *   reference            two quick ticks: the real crossing time
+     *
+     * The warning-time sound stays synthesized (comparison.js): a recording
+     * cannot be held for any number of seconds with clean ends.
+     *
+     * If a recording is not loaded yet, or the style is Classic, the tone of
+     * the same role plays instead, so nothing is ever silent.
+     */
+    const GS_SOUND_STYLE_KEY = "om-sound-style";
+    const GS_SOUND_STYLES = ["bright", "warm", "classic"];
+    const GS_SOUND_STYLE_DEFAULT = "bright";
+    const GS_SOUND_ROLES = ["right-a", "right-b", "wrong-a", "wrong-b", "marker", "confirm", "reference"];
+    /* The "Sound pitch" setting also moves the cues, by a few semitones. A
+     * recording played lower is also a little longer; its start does not move. */
+    const GS_CUE_SEMITONES = [-5, -4, -2, 0, 2];
+    const cueBuffers = {};
+    const cueLoading = {};
+
+    function gsSoundStyle() {
+      const stored = localStorage.getItem(GS_SOUND_STYLE_KEY);
+      return GS_SOUND_STYLES.includes(stored) ? stored : GS_SOUND_STYLE_DEFAULT;
+    }
+
+    function gsSetSoundStyle(style) {
+      const clean = GS_SOUND_STYLES.includes(style) ? style : GS_SOUND_STYLE_DEFAULT;
+      localStorage.setItem(GS_SOUND_STYLE_KEY, clean);
+      gsLoadCueSounds();
+      return clean;
+    }
+
+    /* What the right and wrong sounds are like, in words, for "What the
+     * sounds mean": it follows the style and the choice in Settings. */
+    const GS_SOUND_WORDS = {
+      classic: { acceptable: "A short, bright chime.", outside: "A longer, low, buzzing pulse." },
+      "acceptable-a": "Three notes going up.",
+      "acceptable-b": "Three notes going up, in wider steps.",
+      "outside-a": "A short, low sound.",
+      "outside-b": "One bright note, then two lower notes."
+    };
+
+    function gsSoundWords(category) {
+      if (gsSoundStyle() === "classic") return GS_SOUND_WORDS.classic[category];
+      return GS_SOUND_WORDS[getSelectedSound(category)] || GS_SOUND_WORDS[`${category}-a`];
+    }
+
+    function gsRefreshSoundWords() {
+      const right = document.getElementById("rightSoundWords");
+      const wrong = document.getElementById("wrongSoundWords");
+      if (right) right.textContent = gsSoundWords("acceptable");
+      if (wrong) wrong.textContent = gsSoundWords("outside");
+    }
+
+    function gsCueRate() {
+      const index = typeof gsSamplePitchIndex === "function" ? gsSamplePitchIndex() : 3;
+      return Math.pow(2, (GS_CUE_SEMITONES[index] ?? 0) / 12);
+    }
+
+    /* Web and Android: fetch and decode the seven recordings of the chosen
+     * style. The iPhone app loads its own copies (GapSenseAudio.swift). */
+    function gsLoadCueSounds() {
+      const style = gsSoundStyle();
+      if (nativeSound) {
+        // The iPhone app plays its own copies; ask once which ones it has.
+        if (nativeCueNames || cueLoading.native || typeof GSNativePlugin?.cueList !== "function") return;
+        cueLoading.native = true;
+        Promise.resolve(nativeCall("cueList", {}))
+          .then((result) => { nativeCueNames = new Set(Array.isArray(result?.names) ? result.names : []); })
+          .catch(() => { cueLoading.native = false; });
+        return;
+      }
+      if (style === "classic" || cueLoading[style]) return;
+      if (typeof fetch !== "function") return;
+      cueLoading[style] = true;
+      const context = ensureAudioContext();
+      GS_SOUND_ROLES.forEach((role) => {
+        fetch(`sounds/${style}/${role}.wav`)
+          .then((response) => (response.ok ? response.arrayBuffer() : Promise.reject(new Error("missing"))))
+          .then((data) => new Promise((resolve, reject) => {
+            const pending = context.decodeAudioData(data, resolve, reject);
+            if (pending && typeof pending.catch === "function") pending.catch(reject);
+          }))
+          .then((buffer) => { cueBuffers[`${style}/${role}`] = buffer; })
+          .catch(() => { cueLoading[style] = false; });
+      });
+    }
+
+    /* Play one recording. Returns false when the tone should play instead. */
+    function gsPlayCue(role, startTime = 0, volumeScale = 1) {
+      const style = gsSoundStyle();
+      if (style === "classic" || !role) return false;
+      if (a11ySettings.outputMode === "visual-only") return true;
+      const rate = gsCueRate();
+      const level = TEST_TUNING.masterVolume * volumeScale;
+      if (nativeSound) {
+        if (!nativeCueNames) gsLoadCueSounds();
+        if (!nativeCueNames || !nativeCueNames.has(`${style}/${role}`)) return false;
+        nativeCall("cue", { name: `${style}/${role}`, delay: Math.max(0, startTime), level, rate });
+        return true;
+      }
+      const buffer = cueBuffers[`${style}/${role}`];
+      if (!buffer) {
+        gsLoadCueSounds();
+        return false;
+      }
+      const context = ensureAudioContext();
+      if (context.state !== "running" && !gsPlayCue.retrying) {
+        context.resume().then(() => {
+          gsPlayCue.retrying = true;
+          try {
+            gsPlayCue(role, startTime, volumeScale);
+          } finally {
+            gsPlayCue.retrying = false;
+          }
+        }).catch(() => {});
+        return true;
+      }
+      const now = context.currentTime + startTime;
+      const source = context.createBufferSource();
+      source.buffer = buffer;
+      source.playbackRate.value = rate;
+      const gain = context.createGain();
+      gain.gain.setValueAtTime(level, now);
+      // Past the soft clipper: see gsBuildOutputStage.
+      source.connect(gain).connect(cueOutput || masterLimiter);
+      source.start(now);
+      const length = buffer.duration / rate;
+      rememberScheduledSound({ gain, oscillators: [source], endAt: now + length + 0.02 });
+      gsDuckSteadyAround(now, length);
+      gsCuesPlayed += 1;
+      return true;
+    }
+    let gsCuesPlayed = 0;
+    let cueOutput = null;
+    let nativeCueNames = null;
 
     let audioWarmedUp = false;
 
@@ -634,6 +794,57 @@
       } catch (error) {
         /* non-fatal: the next tone will still play */
       }
+    }
+
+    /* Linear up to 0.8, then bending over so the output never passes 1. The
+     * curve covers inputs from -2 to 2 (the node in front halves the signal). */
+    function softKneeCurve() {
+      const points = 4097;
+      const curve = new Float32Array(points);
+      for (let i = 0; i < points; i += 1) {
+        const x = ((i / (points - 1)) * 2 - 1) * 2;
+        const size = Math.abs(x);
+        const y = size <= 0.8 ? size : 0.8 + 0.2 * Math.tanh((size - 0.8) / 0.2);
+        curve[i] = x < 0 ? -y : y;
+      }
+      return curve;
+    }
+
+    /*
+     * The output chain, on any audio context (the tests build it on an
+     * offline one). Returns the two inputs:
+     *   tones  every synthesized sound. It goes through a soft clipper:
+     *          against build 8 the steady sample is about 7 dB louder and
+     *          the chimes about 5 dB, and the added overtones carry better
+     *          on a phone speaker (testers found the sound too quiet at full
+     *          phone volume).
+     *   cues   the recorded sounds (build 28). A recording is finished
+     *          sound; the clipper would only roughen it, so it joins after.
+     * The sum of the two is held under full scale by a gentle knee at 0.8,
+     * exactly as the iPhone app does in GapSenseAudio.swift, and a limiter
+     * stays behind that as the last guard.
+     */
+    function gsBuildOutputStage(context) {
+      const limiter = context.createDynamicsCompressor();
+      limiter.threshold.value = -2;
+      limiter.knee.value = 0;
+      limiter.ratio.value = 20;
+      limiter.attack.value = 0.001;
+      limiter.release.value = 0.05;
+      limiter.connect(context.destination);
+      const knee = context.createWaveShaper();
+      knee.curve = softKneeCurve();
+      knee.connect(limiter);
+      const sum = context.createGain();
+      sum.gain.value = 0.5;
+      sum.connect(knee);
+      const tones = context.createWaveShaper();
+      tones.curve = softClipCurve(3);
+      tones.oversample = "2x";
+      tones.connect(sum);
+      const cues = context.createGain();
+      cues.connect(sum);
+      return { tones, cues, limiter };
     }
 
     function softClipCurve(drive) {
@@ -697,24 +908,9 @@
         // pass through untouched, but overlapping cues (user marker + feedback
         // tone landing together during replay) are caught here instead of
         // hard-clipping into distortion.
-        const limiter = audioContext.createDynamicsCompressor();
-        limiter.threshold.value = -2;
-        limiter.knee.value = 0;
-        limiter.ratio.value = 20;
-        limiter.attack.value = 0.001;
-        limiter.release.value = 0.05;
-        limiter.connect(audioContext.destination);
-        // Loudness: every cue goes through a soft clipper before the limiter.
-        // Against build 8 the steady sample is about 7 dB louder and the
-        // chimes about 5 dB, peaks stay just under full scale, and the added
-        // overtones carry better on a phone speaker.
-        // Testers found the sound too quiet at full phone volume. The iPhone
-        // app does the same in GapSenseAudio.swift. `masterLimiter` is the
-        // input every cue connects to.
-        masterLimiter = audioContext.createWaveShaper();
-        masterLimiter.curve = softClipCurve(3);
-        masterLimiter.oversample = "2x";
-        masterLimiter.connect(limiter);
+        const stage = gsBuildOutputStage(audioContext);
+        masterLimiter = stage.tones;
+        cueOutput = stage.cues;
         // iOS moves a context to "interrupted" (not "suspended") when
         // something else takes the audio hardware for a moment: a call, Siri,
         // another app, a haptic engine starting. The old check only resumed
@@ -964,6 +1160,7 @@
 
     function playSoundOption(option, startTime = 0, volumeScale = 1) {
       if (!option) return;
+      if (option.sample && gsPlayCue(option.sample, startTime, volumeScale)) return;
       playCompositeTone(option.partials, option.duration || 0.12, startTime, volumeScale);
     }
 
@@ -988,6 +1185,7 @@
 
     /** Two quick blips: "this is the real crossing time". Never a feedback cue. */
     function playReferenceTick(startTime = 0) {
+      if (gsPlayCue("reference", startTime, TEST_TUNING.feedbackVolume)) return;
       const option = SOUND_FALLBACK_TONES["reference-tick"];
       playSoundOption(option, startTime, TEST_TUNING.feedbackVolume);
       playSoundOption(option, startTime + 0.11, TEST_TUNING.feedbackVolume);
@@ -1019,6 +1217,11 @@
     }
 
     function applyStoredSelections() {
+      const style = gsSoundStyle();
+      soundStyleInputs.forEach((input) => { input.checked = input.value === style; });
+      gsLoadCueSounds();
+      gsLoadVoiceManifest();
+      gsRefreshSoundWords();
       const acceptableSelection = getSelectedSound("acceptable");
       const outsideSelection = getSelectedSound("outside");
       acceptableInputs.forEach((input) => {
@@ -2310,16 +2513,226 @@
       return typeof window.speechSynthesis !== "undefined" && typeof window.SpeechSynthesisUtterance === "function";
     }
 
+    /* Build 28: prefer the most natural US English voice the browser offers.
+     * Names differ by system: "Natural" and "Neural" (Edge, Android),
+     * "Premium" and "Enhanced" (Apple), then the usual good defaults. */
     function pickEnglishVoice() {
       try {
-        const voices = window.speechSynthesis.getVoices() || [];
-        return voices.find((v) => v.lang === "en-US" && v.localService)
-          || voices.find((v) => v.lang === "en-US")
-          || voices.find((v) => /^en/i.test(v.lang))
-          || null;
+        const voices = (window.speechSynthesis.getVoices() || []).filter((v) => /^en[-_]US/i.test(v.lang));
+        const all = voices.length ? voices : (window.speechSynthesis.getVoices() || []).filter((v) => /^en/i.test(v.lang));
+        const score = (v) => {
+          const name = String(v.name || "");
+          if (/natural|neural/i.test(name)) return 5;
+          if (/premium/i.test(name)) return 4;
+          if (/enhanced/i.test(name)) return 3;
+          if (/^(samantha|ava|allison|zoe|google us english)/i.test(name)) return 2;
+          return v.localService ? 1 : 0;
+        };
+        let best = null;
+        all.forEach((v) => { if (!best || score(v) > score(best)) best = v; });
+        return best;
       } catch (error) {
         return null;
       }
+    }
+
+    /*
+     * Build 28: a natural voice.
+     *
+     * The phone's built-in voice sounds robotic (Azizul, 21 Nov 2026). The
+     * app's own fixed sentences ("Get ready", "Replay", "Correct.", the
+     * directions on each screen) are now recordings of one natural voice,
+     * made once with an open text-to-speech model and shipped in www/voice/.
+     * voice/manifest.json maps each sentence to its file.
+     *
+     * A message is played from recordings only when every sentence in it
+     * has one. Anything else (a number of seconds, a student's name) is
+     * spoken by the phone's voice as before, so nothing is ever left
+     * unsaid, and one message never changes voice half-way.
+     */
+    const GS_VOICE_KEY = "om-voice";            // "natural" (default) or "phone"
+    const GS_SENTENCE = /\S.*?(?:[.!?\u2026]+(?=\s|$)|$)/g;
+    let gsVoiceManifest = null;
+    let gsVoiceClipActive = null;               // set while recorded sentences play
+    let gsVoiceAudioEl = null;
+    let gsVoiceClipsPlayed = 0;
+
+    function gsVoiceNatural() {
+      return localStorage.getItem(GS_VOICE_KEY) !== "phone";
+    }
+
+    function gsSetVoice(value) {
+      localStorage.setItem(GS_VOICE_KEY, value === "phone" ? "phone" : "natural");
+    }
+
+    /* One sentence as the manifest spells it: lower case, single spaces, no
+     * final full stop. A question mark stays: a question sounds different. */
+    function gsVoiceKey(sentence) {
+      return String(sentence || "")
+        .replace(/\u200b/g, "")
+        .replace(/\s+/g, " ")
+        .trim()
+        .replace(/[.!\u2026]+$/, "")
+        .trim()
+        .toLowerCase();
+    }
+
+    /* The recordings that say this text, in order; null if any part of it
+     * has none. */
+    function gsVoiceClipsFor(text) {
+      if (!gsVoiceManifest || !gsVoiceNatural()) return null;
+      // The iPhone app plays recordings itself or not at all: web audio there
+      // would hand the sound back to the silent switch.
+      if (nativeSound && typeof GSNativePlugin?.speakClips !== "function") return null;
+      const whole = gsVoiceManifest[gsVoiceKey(text)];
+      if (whole) return [whole];
+      const sentences = String(text).match(GS_SENTENCE) || [];
+      if (!sentences.length || sentences.length > 12) return null;
+      const files = [];
+      for (const sentence of sentences) {
+        const file = gsVoiceManifest[gsVoiceKey(sentence)];
+        if (!file) return null;
+        files.push(file);
+      }
+      return files;
+    }
+
+    function gsLoadVoiceManifest() {
+      if (gsVoiceManifest || typeof fetch !== "function") return;
+      fetch("voice/manifest.json")
+        .then((response) => (response.ok ? response.json() : null))
+        .then((data) => {
+          if (!data || !data.clips || typeof data.clips !== "object") return;
+          gsVoiceManifest = data.clips;
+          setTimeout(gsWarmVoiceCache, 20000);
+        })
+        .catch(() => {});
+    }
+
+    /* A recording as a URL the player can use. Fetched as a whole file and
+     * handed over as a blob: a media player asks a server for byte ranges,
+     * which the offline cache cannot keep, so a recording played straight
+     * from its address would be missing at a street corner with no signal. */
+    const gsVoiceBlobUrls = new Map();
+    function gsVoiceClipUrl(file) {
+      if (gsVoiceBlobUrls.has(file)) return Promise.resolve(gsVoiceBlobUrls.get(file));
+      return fetch(`voice/${file}.mp3`)
+        .then((response) => (response.ok ? response.blob() : Promise.reject(new Error("missing"))))
+        .then((blob) => {
+          const url = URL.createObjectURL(blob);
+          gsVoiceBlobUrls.set(file, url);
+          return url;
+        });
+    }
+
+    /*
+     * Website only: once the page has settled, fetch every recording one at
+     * a time so the offline cache holds the whole voice (about 9 MB), not
+     * just the sentences heard so far. Skipped when the phone asks to save
+     * data, and done once for each set of recordings.
+     */
+    function gsWarmVoiceCache() {
+      if (isNativeShell || !gsVoiceManifest || !gsVoiceNatural()) return;
+      if (!navigator.serviceWorker?.controller || navigator.connection?.saveData) return;
+      const files = [...new Set(Object.values(gsVoiceManifest))].sort();
+      let hash = 5381;
+      for (const ch of files.join("")) hash = ((hash * 33) ^ ch.charCodeAt(0)) >>> 0;
+      const stamp = `${files.length}-${hash}`;
+      if (localStorage.getItem("om-voice-cached") === stamp) return;
+      let index = 0;
+      const step = () => {
+        if (index >= files.length) {
+          localStorage.setItem("om-voice-cached", stamp);
+          return;
+        }
+        if (document.hidden || navigator.onLine === false) return;   // next visit carries on
+        const file = files[index];
+        index += 1;
+        fetch(`voice/${file}.mp3`).then(() => setTimeout(step, 120), () => {});
+      };
+      step();
+    }
+
+    function gsVoiceAudio() {
+      if (!gsVoiceAudioEl) {
+        gsVoiceAudioEl = new Audio();
+        gsVoiceAudioEl.preload = "auto";
+      }
+      return gsVoiceAudioEl;
+    }
+
+    /* Safari only lets a page start sound from a touch. One silent play on
+     * the first touch lets the same player speak later, when a timer or the
+     * end of a sound asks for it. */
+    if (!isNativeShell && typeof Audio === "function") {
+      document.addEventListener("pointerdown", () => {
+        try {
+          const el = gsVoiceAudio();
+          if (gsVoiceClipActive || el.src) return;
+          el.src = "data:audio/wav;base64,UklGRiYAAABXQVZFZm10IBAAAAABAAEAQB8AAIA+AAACABAAZGF0YQIAAAAAAA==";
+          const pending = el.play();
+          if (pending && typeof pending.catch === "function") pending.catch(() => {});
+        } catch (error) {
+          /* the phone's voice is still there */
+        }
+      }, { once: true, capture: true, passive: true });
+    }
+
+    /*
+     * Play recorded sentences one after another. done() when the last has
+     * ended, or when speech is stopped; fallback() when a recording cannot
+     * be played (offline before it was ever fetched, a blocked player), so
+     * the phone's voice says the words instead.
+     */
+    function gsPlayVoiceClips(files, { done, fallback }) {
+      const rate = Number(a11ySettings.speechRate) || 1;
+      const active = { ended: false, stop: null };
+      const end = (how) => {
+        if (active.ended) return;
+        active.ended = true;
+        if (gsVoiceClipActive === active) gsVoiceClipActive = null;
+        if (how === "fail") fallback();
+        else done();
+      };
+      gsVoiceClipActive = active;
+      gsVoiceClipsPlayed += 1;
+      if (nativeSound && typeof GSNativePlugin?.speakClips === "function") {
+        // Stopped through stopSpeaking, which gsStopSpeech sends anyway.
+        active.stop = () => end("done");
+        Promise.resolve(nativeCall("speakClips", { files, rate, interrupt: true }))
+          .then((result) => end(result && result.completed === false ? "fail" : "done"), () => end("fail"));
+        return;
+      }
+      const el = gsVoiceAudio();
+      let index = 0;
+      // Fetch them all now, so one sentence follows the next without a wait.
+      files.forEach((file) => { gsVoiceClipUrl(file).catch(() => {}); });
+      const next = () => {
+        if (active.ended) return;
+        if (index >= files.length) {
+          end("done");
+          return;
+        }
+        const file = files[index];
+        index += 1;
+        gsVoiceClipUrl(file).then((url) => {
+          if (active.ended) return;
+          el.onended = next;
+          el.onerror = () => end("fail");
+          el.src = url;
+          el.defaultPlaybackRate = rate;
+          el.playbackRate = rate;     // the browser keeps the pitch
+          const pending = el.play();
+          if (pending && typeof pending.catch === "function") pending.catch(() => end("fail"));
+        }).catch(() => end("fail"));
+      };
+      active.stop = () => {
+        el.onended = null;
+        el.onerror = null;
+        try { el.pause(); } catch (error) { /* already stopped */ }
+        end("done");
+      };
+      next();
     }
 
     /**
@@ -2333,10 +2746,36 @@
         finished = true;
         if (typeof onDone === "function") onDone();
       };
-      if (!text || !speechAvailable() || a11ySettings.outputMode === "visual-only") {
+      if (!text || a11ySettings.outputMode === "visual-only") {
         if (onDone) setTimeout(done, 0);
         return false;
       }
+      // Build 28: the recorded natural voice, when it has every sentence.
+      // Not while something else is still talking and must not be cut off.
+      const clips = (interrupt || !gsSpeechBusy()) ? gsVoiceClipsFor(text) : null;
+      if (clips) {
+        if (interrupt) gsStopSpeech();
+        gsPlayVoiceClips(clips, {
+          done,
+          fallback: () => {
+            if (speechAvailable()) gsSpeakPhone(text, { done, interrupt: false, maxWaitMs, onDone: null });
+            else done();
+          }
+        });
+        if (onDone) setTimeout(done, maxWaitMs);
+        return true;
+      }
+      // A phone with no speech engine still has the recordings above
+      // (tracker 27.15); past this point there is nothing to speak with.
+      if (!speechAvailable()) {
+        if (onDone) setTimeout(done, 0);
+        return false;
+      }
+      return gsSpeakPhone(text, { done, interrupt, maxWaitMs, onDone });
+    }
+
+    /* The phone's own voice: any text at all. */
+    function gsSpeakPhone(text, { done, interrupt, maxWaitMs, onDone }) {
       if (nativeSpeech) {
         // Spoken by the app itself: on iPhone through the same session as the
         // tones, so the silent switch cannot mute "Get ready" either; on
@@ -2373,6 +2812,7 @@
 
     /** Is anything being spoken right now? */
     function gsSpeechBusy() {
+      if (gsVoiceClipActive) return true;
       if (nativeSpeech) return nativeSpeechToken !== null;
       try {
         return speechAvailable() && window.speechSynthesis.speaking;
@@ -2382,6 +2822,7 @@
     }
 
     function gsStopSpeech() {
+      if (gsVoiceClipActive) gsVoiceClipActive.stop();
       if (nativeSpeech) {
         nativeSpeechToken = null;
         nativeSpeechCall("stopSpeaking", {});
@@ -3265,6 +3706,7 @@
       a11yAnnounceCues.checked = a11ySettings.announceCues;
       if (a11ySelfVoice) a11ySelfVoice.checked = a11ySettings.selfVoice;
       if (a11ySpeechRate) a11ySpeechRate.value = String(a11ySettings.speechRate);
+      if (a11yVoice) a11yVoice.value = gsVoiceNatural() ? "natural" : "phone";
       if (a11ySayReplay) a11ySayReplay.checked = a11ySettings.sayReplay;
       if (a11yDescribeSounds) a11yDescribeSounds.checked = a11ySettings.describeSounds;
       if (a11yDescribeWhere) a11yDescribeWhere.value = a11ySettings.describeWhere;
@@ -3328,11 +3770,22 @@
     });
 
     acceptableInputs.forEach((input) => {
-      input.addEventListener("change", () => { storeSelection("acceptable", input.value); });
+      input.addEventListener("change", () => { storeSelection("acceptable", input.value); gsRefreshSoundWords(); });
     });
 
     outsideInputs.forEach((input) => {
-      input.addEventListener("change", () => { storeSelection("outside", input.value); });
+      input.addEventListener("change", () => { storeSelection("outside", input.value); gsRefreshSoundWords(); });
+    });
+
+    soundStyleInputs.forEach((input) => {
+      input.addEventListener("change", () => {
+        if (!input.checked) return;
+        gsSetSoundStyle(input.value);
+        gsRefreshSoundWords();
+        // Let the student hear the change at once: their own sound.
+        ensureAudioContext();
+        setTimeout(() => playStudentTone(0), 250);
+      });
     });
 
     previewButtons.forEach((button) => {
@@ -3518,6 +3971,12 @@
       }
     });
 
+    a11yVoice?.addEventListener("change", () => {
+      gsSetVoice(a11yVoice.value);
+      gsStopSpeech();
+      gsSpeak("This is the voice.");
+    });
+
     a11ySpeechRate?.addEventListener("change", () => {
       const rate = Number(a11ySpeechRate.value);
       a11ySettings.speechRate = [0.8, 1, 1.25].includes(rate) ? rate : 1;
@@ -3609,7 +4068,7 @@
       const note = () => {
         if (!soundTestNote) return;
         const state = context.state === "running" ? "on" : context.state;
-        soundTestNote.textContent = `Sound engine: ${state}. You should hear a steady tone, then a chime.`;
+        soundTestNote.textContent = `Sound engine: ${state}. You should hear a steady tone, then the right sound.`;
       };
       const play = () => {
         playCompositeTone(gsSamplePartials(), 1.0, 0.05, gsSampleLevel(), "steady");

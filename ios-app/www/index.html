@@ -846,17 +846,24 @@
         <div class="setup-group">
           <h3 class="setup-heading">Sound calibration</h3>
           <fieldset class="option-group">
+            <legend class="option-group-title">Sound style</legend>
+            <label><input type="radio" name="soundStyle" value="bright" checked /> Bright: clear, ringing notes (default)</label>
+            <label><input type="radio" name="soundStyle" value="warm" /> Warm: softer, shorter notes</label>
+            <label><input type="radio" name="soundStyle" value="classic" /> Classic: the plain tones of earlier versions</label>
+          </fieldset>
+          <p class="setup-note">Changes the right and wrong sounds, your own sound and the warning-time sound. Use the Play buttons below to hear each one. "Sound pitch", on the activity pages, makes all of them lower or higher.</p>
+          <fieldset class="option-group">
             <legend class="option-group-title">Acceptable (within the margin)</legend>
             <div class="sound-options">
               <div class="sound-option">
                 <input type="radio" id="acceptable-a" name="acceptableSound" value="acceptable-a" />
-                <label for="acceptable-a">Chime A</label>
-                <button type="button" class="preview-btn" data-sound="acceptable-a">Play Chime A</button>
+                <label for="acceptable-a">Right sound A</label>
+                <button type="button" class="preview-btn" data-sound="acceptable-a">Play Right sound A</button>
               </div>
               <div class="sound-option">
                 <input type="radio" id="acceptable-b" name="acceptableSound" value="acceptable-b" />
-                <label for="acceptable-b">Chime B</label>
-                <button type="button" class="preview-btn" data-sound="acceptable-b">Play Chime B</button>
+                <label for="acceptable-b">Right sound B</label>
+                <button type="button" class="preview-btn" data-sound="acceptable-b">Play Right sound B</button>
               </div>
             </div>
           </fieldset>
@@ -865,13 +872,13 @@
             <div class="sound-options">
               <div class="sound-option">
                 <input type="radio" id="outside-a" name="outsideSound" value="outside-a" />
-                <label for="outside-a">Low Pulse A</label>
-                <button type="button" class="preview-btn" data-sound="outside-a">Play Low Pulse A</button>
+                <label for="outside-a">Wrong sound A</label>
+                <button type="button" class="preview-btn" data-sound="outside-a">Play Wrong sound A</button>
               </div>
               <div class="sound-option">
                 <input type="radio" id="outside-b" name="outsideSound" value="outside-b" />
-                <label for="outside-b">Low Pulse B</label>
-                <button type="button" class="preview-btn" data-sound="outside-b">Play Low Pulse B</button>
+                <label for="outside-b">Wrong sound B</label>
+                <button type="button" class="preview-btn" data-sound="outside-b">Play Wrong sound B</button>
               </div>
             </div>
           </fieldset>
@@ -987,6 +994,12 @@
             <option value="each">On each activity page</option>
           </select>
           <p class="setup-note" id="a11yDescribeWhereNote">Here: the switch above applies to every activity. On each activity page: each activity has its own switch, just below its introduction, so the student can have results in words in one activity and not in another.</p>
+          <label for="a11yVoice">Voice</label>
+          <select id="a11yVoice">
+            <option value="natural" selected>Natural voice (recorded, default)</option>
+            <option value="phone">This phone's own voice</option>
+          </select>
+          <p class="setup-note">The natural voice is a recording of the app's own sentences, such as "Get ready", "Replay" and "Correct". A sentence with a number or a name in it is still said by the phone's voice.</p>
           <label for="a11ySpeechRate">Speaking rate</label>
           <select id="a11ySpeechRate">
             <option value="0.8">Slower</option>
@@ -1151,12 +1164,12 @@
         </div>
         <div class="setup-group">
           <h3 class="setup-heading">Close enough</h3>
-          <p class="field-help">A short, bright chime. You were within the margin, or your answer was right.</p>
+          <p class="field-help"><span id="rightSoundWords">Three notes going up.</span> You were within the margin, or your answer was right.</p>
           <button class="settings-action" type="button" data-demo="acceptable">Play the within-margin sound</button>
         </div>
         <div class="setup-group">
           <h3 class="setup-heading">Outside the margin</h3>
-          <p class="field-help">A longer, low, buzzing pulse. You were too far off, or your answer was wrong.</p>
+          <p class="field-help"><span id="wrongSoundWords">A short, low sound.</span> You were too far off, or your answer was wrong.</p>
           <button class="settings-action" type="button" data-demo="outside">Play the outside-margin sound</button>
         </div>
         <div class="setup-group">
