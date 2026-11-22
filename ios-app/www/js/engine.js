@@ -1770,7 +1770,17 @@
       // was made for, never to whoever is selected (tracker 20.4). When that
       // means a switch, the app restarts and the link is applied after it.
       const parsedForStudent = parseShareToken(hash.slice(3));
-      if (parsedForStudent?.code && typeof gsStudentsRouteSetupLink === "function" && gsStudentsRouteSetupLink(parsedForStudent.code)) return true;
+      if (parsedForStudent?.code && typeof gsStudentsRouteSetupLink === "function") {
+        const routed = gsStudentsRouteSetupLink(parsedForStudent.code);
+        if (routed === "refused") {
+          // Tracker 27.2: for another student, who could not be reached.
+          // Nothing is applied to the student who is open.
+          pendingStatusMessage = gsStudentsLinkRefusal;
+          clearImportedHash();
+          return true;
+        }
+        if (routed) return true;
+      }
       applyShareToken(hash.slice(3));
       clearImportedHash();
       return true;
@@ -1802,7 +1812,14 @@
           try {
             window.history.replaceState({}, document.title, `${window.location.pathname}${window.location.search}#ts=${token}`);
           } catch (error) { /* the link is still applied below */ }
-          if (gsStudentsRouteSetupLink(forStudent.code)) return true;
+          const routed = gsStudentsRouteSetupLink(forStudent.code);
+          if (routed === "refused") {
+            clearImportedHash();
+            setStatus(gsStudentsLinkRefusal, "warn");
+            announceScreenReader(gsStudentsLinkRefusal);
+            return true;
+          }
+          if (routed) return true;
           clearImportedHash();
         }
         const ok = applyShareToken(token);
@@ -2231,13 +2248,24 @@
     function startSynchronizedVisualReplay(events, endAtSec, target = null, { append = false } = {}) {
       // The bar on the screen runs whenever anything is shown at all; the
       // full-screen flashes only with the synchronized visual replay on.
+      const flashes = visualOutputEnabled() && a11ySettings.syncVisualReplay;
+      const joining = append && Boolean(visualReplayState.rafId);
+      // Tracker 27.11: the earlier replay is cleared first. The clean-up also
+      // stops the bar, and it used to run after the new bar had started, so
+      // the bar and its markers were hidden as soon as they appeared.
+      // A second replay that joins a bar still running (append) leaves the
+      // bar alone and only clears the old full-screen frame.
+      if (flashes && !joining) {
+        if (append) hideVisualReplayFrame();
+        else stopVisualReplay();
+      }
       if (!target) gsReplayBarStart(events, endAtSec, { append });
-      if (!visualOutputEnabled() || !a11ySettings.syncVisualReplay) return;
+      if (!flashes) return;
       const context = ensureAudioContext();
       // Replay B schedules two replays back to back; the second used to stop
       // the first, so its visuals vanished (bug 30, Oct 2026 review). With
       // append, the new events join the timeline already running.
-      if (append && visualReplayState.rafId) {
+      if (joining) {
         const offset = context.currentTime - visualReplayState.replayStartTime;
         visualReplayState.events = [
           ...visualReplayState.events,
@@ -2246,7 +2274,6 @@
         visualReplayState.endAtSec = Math.max(visualReplayState.endAtSec, endAtSec + offset);
         return;
       }
-      stopVisualReplay();
       visualReplayState.events = [...events].sort((a, b) => a.timeSec - b.timeSec);
       visualReplayState.nextIndex = 0;
       visualReplayState.endAtSec = endAtSec;

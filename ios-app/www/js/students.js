@@ -169,6 +169,54 @@ function gsNewStudentId() {
 }
 
 /* Write the durable copy now, then start the app again with the new data. */
+/*
+ * Two browser tabs on one phone (tracker 27.5). Each tab holds one student's
+ * practice in memory; a switch in one tab rewrites the shared storage under
+ * the other. A try finished in the stale tab used to be saved into the
+ * newly selected student's history. Now each tab remembers which student it
+ * started with: a tab that sees another tab switch student starts again on
+ * that student, and a try is never saved under a different student from the
+ * one the tab was showing.
+ */
+function gsActiveStudentIdNow() {
+  try {
+    const raw = JSON.parse(localStorage.getItem(GS_STUDENTS_KEY) || "null");
+    return raw && raw.active ? String(raw.active) : "";
+  } catch (error) {
+    return "";
+  }
+}
+
+const gsTabStudentId = gsActiveStudentIdNow();
+let gsTabStudentReloading = false;
+
+function gsStudentChangedElsewhere() {
+  return gsActiveStudentIdNow() !== gsTabStudentId;
+}
+
+function gsStudentMismatchReload(message) {
+  if (gsTabStudentReloading) return;
+  gsTabStudentReloading = true;
+  try { sessionStorage.setItem("gs-students-note", message); } catch (error) { /* ignore */ }
+  if (typeof window.__gsStudentsReload === "function") window.__gsStudentsReload();
+  else window.location.reload();
+}
+
+/* For gsLogAttempt and gsLogHowMuch: false when the try must not be saved. */
+function gsStudentStillThisTabs() {
+  if (!gsStudentChangedElsewhere()) return true;
+  gsStudentMismatchReload("The student was changed in another tab, so that try was not saved. This tab now shows the student who is selected.");
+  return false;
+}
+
+window.addEventListener("storage", (event) => {
+  // Fires only in the other tabs. key is null when storage was cleared.
+  if (event.key !== null && event.key !== GS_STUDENTS_KEY) return;
+  if (gsStudentChangedElsewhere()) {
+    gsStudentMismatchReload("The student was changed in another tab. This tab now shows the student who is selected.");
+  }
+});
+
 async function gsStudentsCommitAndReload(message) {
   try { sessionStorage.setItem("gs-students-note", message || ""); } catch (error) { /* ignore */ }
   try {
@@ -292,8 +340,12 @@ function gsStudentsSetStarted(day) {
  *   - otherwise (the student in use has that code, or no code yet, or the
  *     phone has one student): the link is applied as before.
  * Returns true when the app is restarting to do it; the link stays in the
- * address so it is applied after the restart.
+ * address so it is applied after the restart. Returns "refused" when the
+ * link belongs to another student and that student could not be reached:
+ * the caller must then apply nothing (tracker 27.2). False: apply as usual.
  */
+let gsStudentsLinkRefusal = "";
+
 function gsStudentsRouteSetupLink(code) {
   const registry = gsStudentsSynced();
   const clean = gsStudentCodeClean(code);
@@ -312,8 +364,15 @@ function gsStudentsRouteSetupLink(code) {
     return false;
   }
   if (!result.ok) {
-    try { sessionStorage.setItem("gs-students-note", result.message || GS_STUDENTS_FULL); } catch (error) { /* ignore */ }
-    return false;
+    // Tracker 27.2: the phone could not switch to, or add, the student this
+    // link was made for (storage full, for one). Returning false here used
+    // to let the caller apply the link to whoever was open, putting one
+    // student's crossing times, margin and contacts on another. The link is
+    // now refused, nothing is changed, and the reason is said.
+    const why = result.message || GS_STUDENTS_FULL;
+    gsStudentsLinkRefusal = `This setup link is for student ${clean}, and this phone could not ${owner ? "switch to" : "add"} that student. ${why} Nothing was changed: the student now open keeps their own crossing times.`;
+    try { sessionStorage.setItem("gs-students-note", gsStudentsLinkRefusal); } catch (error) { /* ignore */ }
+    return "refused";
   }
   gsStudentsCommitAndReload(message);
   return true;

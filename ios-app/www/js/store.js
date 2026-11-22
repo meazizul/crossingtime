@@ -39,6 +39,11 @@
   const HISTORY_FILE = "gapsense/history.json";
   const RESTORED_FLAG = "gs-restored-once";
   const CLEARED_FLAG = "gs-cleared";              // the page itself emptied localStorage: do not restore on the next load
+  // Tracker 27.3: the student deleted their history, and the durable copy
+  // has not been rewritten yet (no space, the app closed first). Kept in
+  // localStorage, outside the om- keys, until a write of the copy succeeds.
+  // While it is there, history is never restored from the copy.
+  const DELETION_PENDING = "gs-history-deletion-pending";
   const DEBOUNCE_MS = 400;
 
   const cap = window.Capacitor;
@@ -171,10 +176,16 @@
       state.lastSavedAt = Date.now();
       state.lastError = "";
       state.writes += 1;
+      // The copy now matches what is here, deleted history included.
+      try { originalRemove.call(localStorage, DELETION_PENDING); } catch (error) { /* ignore */ }
     } catch (error) {
       state.lastError = String(error?.message || error);
     }
     return state;
+  }
+
+  function deletionPending() {
+    try { return localStorage.getItem(DELETION_PENDING) === "1"; } catch (error) { return false; }
   }
 
   /* ---------------- mirror every write ---------------- */
@@ -227,7 +238,10 @@
     // value that is there. By the time this runs the app has already written
     // its own defaults (a settings version, say), so "lost" means the keys
     // that matter are gone: the crossing times and the history.
-    const historyMissing = !localStorage.getItem(HISTORY_KEY) && copy.history && copy.history !== "[]";
+    // Tracker 27.3: history the student deleted is not "missing". The copy
+    // still has it only because the rewrite failed; it is rewritten now
+    // (the caller schedules a sync when nothing was restored).
+    const historyMissing = !deletionPending() && !localStorage.getItem(HISTORY_KEY) && copy.history && copy.history !== "[]";
     const settingsMissing = !localStorage.getItem("om-full-time") && !localStorage.getItem("om-clear-time") && !localStorage.getItem(HISTORY_KEY) && !localStorage.getItem("om-students");
     if (!historyMissing && !settingsMissing) return false;
     let restoredSomething = false;
@@ -273,11 +287,18 @@
     /* Delete all my practice history (tracker 14.4): the emptied history is
      * written to the copy now, not after the wait, and the copy is never
      * restored over it on the next load. Settings stay in the copy. */
-    clearHistoryNow() {
+    /* Resolves to { durable }: true when the copy was rewritten (or there is
+     * no copy to rewrite), false when it could not be; the deletion then
+     * stays marked as pending and is finished at a later start (27.3). */
+    async clearHistoryNow() {
       clearedHere = true;
       try { sessionStorage.setItem(CLEARED_FLAG, "1"); } catch (error) { /* no session storage */ }
-      return syncNow();
+      if (state.backend === "none") return { durable: true };
+      try { originalSet.call(localStorage, DELETION_PENDING, "1"); } catch (error) { /* ignore */ }
+      await syncNow();
+      return { durable: !deletionPending() };
     },
+    deletionPending,
     /* Switching or removing a student (build 20): the new state goes to the
      * copy now, before the app starts again, and is never replaced by the
      * old copy on the next load. */
@@ -302,6 +323,10 @@
 
   requestPersistence();
   restorePromise = restoreIfNeeded();
+  // Tracker 27.6: for anything that must not write crossing times before the
+  // restore check is over (the demo link). Resolves to true when data was
+  // restored and the page is starting again.
+  window.gsStore.restoreChecked = restorePromise.catch(() => false);
   restorePromise.then((restored) => {
     // The first copy (and the one-time migration) happens here.
     if (!restored) scheduleSync();

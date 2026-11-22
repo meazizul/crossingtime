@@ -95,6 +95,8 @@ function gsHistorySaveProblem() {
 }
 
 function gsLogAttempt(entry) {
+  // Tracker 27.5: never into another student's history.
+  if (typeof gsStudentStillThisTabs === "function" && !gsStudentStillThisTabs()) return gsLoadHistory().length;
   const entries = gsLoadHistory();
   entries.push({ time: Date.now(), ...entry });
   gsSaveHistory(entries);
@@ -111,6 +113,7 @@ function gsLogAttempt(entry) {
  * record of its own, as builds 10 to 13 did.
  */
 function gsLogHowMuch({ activity, street, userSec, refSec, diffSec, correct, marginSec, skipped = false, direction, sense }) {
+  if (typeof gsStudentStillThisTabs === "function" && !gsStudentStillThisTabs()) return gsLoadHistory().length;
   const entries = gsLoadHistory();
   const last = entries[entries.length - 1];
   const howMuch = { userSec, refSec, diffSec, correct, marginSec, skipped: Boolean(skipped), time: Date.now() };

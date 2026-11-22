@@ -95,3 +95,235 @@ test("27.40: on the How much pad a second tap right after the first is ignored",
   expect(result.stillOpen).toBe(true);
   expect(result.done).toBeCloseTo(1.5, 2);
 });
+
+/* ---------------- second batch: 27.2, 27.3, 27.5, 27.6, 27.7, 27.8, 27.9, 27.11 ---------------- */
+
+async function linkFor(page, code, clear, full, margin) {
+  // A real setup link for another student, made by the app's own code.
+  return page.evaluate(([c, a, b, m]) => {
+    const keep = [localStorage.getItem("om-client-code"), clearTimeInput.value, fullTimeInput.value, marginInput.value];
+    document.getElementById("clientCode").value = c;
+    clearTimeInput.value = a; fullTimeInput.value = b; marginInput.value = m;
+    const token = buildShareTimingToken({ times: true, contact: true, features: false, lock: false });
+    document.getElementById("clientCode").value = keep[0] || "";
+    [clearTimeInput.value, fullTimeInput.value, marginInput.value] = keep.slice(1);
+    return token;
+  }, [code, clear, full, margin]);
+}
+
+test("27.2: a setup link for a student who cannot be added changes nothing and says why; the open student's own link still applies", async ({ page }) => {
+  const errors = watchErrors(page);
+  await openApp(page, { storage: { "om-client-code": "AB1" } });
+  // Several students on this phone; AB1 is open.
+  await page.evaluate(() => {
+    const first = gsNewStudentId(), second = gsNewStudentId();
+    localStorage.setItem("om-students", JSON.stringify({ active: first, list: [{ id: first, code: "AB1", started: "" }, { id: second, code: "XY9", started: "" }], data: {}, a11y: 1 }));
+  });
+  await page.reload();
+  await page.waitForFunction(() => typeof gsBoot === "function");
+  await setTimes(page, "4", "8", "0.4");
+  const other = await linkFor(page, "CD2", "6", "12", "0.5");
+  const own = await linkFor(page, "AB1", "5", "10", "0.5");
+  expect(await page.evaluate((t) => parseShareToken(t)?.code, other)).toBe("CD2");
+  // The phone cannot add the student (the list is full, the storage is full).
+  await page.evaluate(() => { window.gsStudentsAdd = () => ({ ok: false, message: "This phone has the most students it can hold." }); });
+  await page.evaluate((t) => { window.location.hash = `ts=${t}`; }, other);
+  await expect(page.locator("#cueBannerText")).toContainText("Nothing was changed");
+  await expect(page.locator("#cueBannerText")).toContainText("could not add that student");
+  const after = await page.evaluate(() => ({ clear: localStorage.getItem("om-clear-time"), full: localStorage.getItem("om-full-time"), margin: localStorage.getItem("om-margin"), code: localStorage.getItem("om-client-code"), hash: location.hash }));
+  expect(after).toMatchObject({ clear: "4", full: "8", margin: "0.4", code: "AB1" });
+  expect(after.hash).not.toContain("ts=");
+  // A link for the student who is open is applied as before.
+  await page.evaluate((t) => { window.location.hash = `ts=${t}`; }, own);
+  await page.waitForFunction(() => localStorage.getItem("om-full-time") === "10");
+  expect(await page.evaluate(() => localStorage.getItem("om-clear-time"))).toBe("5");
+  expect(errors).toEqual([]);
+});
+
+test("27.3: when the backup copy cannot be rewritten, the app does not claim the history is gone for good, and it never comes back", async ({ page }) => {
+  await openApp(page);
+  await setTimes(page);
+  await page.evaluate(async () => {
+    localStorage.setItem("om-attempt-log", JSON.stringify([{ time: Date.now(), activity: "practice", street: "full", userSec: 8, refSec: 8, diffSec: 0, correct: true, marginSec: 0.4 }]));
+    await gsStore.syncNow();
+  });
+  // Every write of the copy now fails, as with no space left.
+  await page.evaluate(() => {
+    window.__realPut = IDBObjectStore.prototype.put;
+    IDBObjectStore.prototype.put = function () { throw new Error("QuotaExceededError"); };
+  });
+  await page.evaluate(() => gsConfirmDeleteHistory());
+  await expect(page.locator("#reportNote")).toContainText("could not be rewritten");
+  await expect(page.locator("#reportNote")).toContainText("will not come back");
+  expect(await page.evaluate(() => gsStore.deletionPending())).toBe(true);
+  // The app is closed and opened again, twice; the copy still holds the old history.
+  for (let i = 0; i < 2; i += 1) {
+    await page.evaluate(() => { sessionStorage.clear(); localStorage.removeItem("om-attempt-log"); });
+    await page.addInitScript(() => { if (window.__failPut) IDBObjectStore.prototype.put = function () { throw new Error("QuotaExceededError"); }; });
+    await page.evaluate(() => { window.__failPut = true; });
+    await page.reload();
+    await page.waitForFunction(() => typeof gsBoot === "function" && window.gsStore?.restoreChecked);
+    expect(await page.evaluate(() => gsStore.restoreChecked)).toBe(false);
+    expect(await page.evaluate(() => JSON.parse(localStorage.getItem("om-attempt-log") || "[]").length)).toBe(0);
+  }
+  // Once the copy can be written, the pending mark goes.
+  await page.evaluate(async () => { await gsStore.syncNow(); });
+  expect(await page.evaluate(() => gsStore.deletionPending())).toBe(false);
+});
+
+test("27.3: after a normal delete the app says deleted, nothing is pending, and a restart keeps it deleted", async ({ page }) => {
+  await openApp(page);
+  await setTimes(page);
+  await page.evaluate(async () => {
+    localStorage.setItem("om-attempt-log", JSON.stringify([{ time: Date.now(), activity: "practice", street: "full", userSec: 8, refSec: 8, diffSec: 0, correct: true, marginSec: 0.4 }]));
+    await gsStore.syncNow();
+    await gsConfirmDeleteHistory();
+  });
+  await expect(page.locator("#reportNote")).toHaveText("All practice history deleted from this browser.");
+  expect(await page.evaluate(() => gsStore.deletionPending())).toBe(false);
+  await page.evaluate(() => sessionStorage.clear());
+  await page.reload();
+  await page.waitForFunction(() => typeof gsBoot === "function");
+  await page.evaluate(() => gsStore.restoreChecked);
+  expect(await page.evaluate(() => JSON.parse(localStorage.getItem("om-attempt-log") || "[]").length)).toBe(0);
+});
+
+test("27.5: a try finished in a tab left on another student is not saved, and that tab starts again on the selected student", async ({ page }) => {
+  await openApp(page, { storage: { "om-client-code": "AB1" } });
+  await setTimes(page);
+  // Two students; this tab shows the first.
+  await page.evaluate(() => { window.__gsStudentsReload = () => { window.__reloads = (window.__reloads || 0) + 1; }; });
+  const ids = await page.evaluate(() => {
+    const first = gsNewStudentId(), second = gsNewStudentId();
+    localStorage.setItem("om-students", JSON.stringify({ active: first, list: [{ id: first, code: "AB1", started: "" }, { id: second, code: "CD2", started: "" }], data: {}, a11y: 1 }));
+    return { first, second };
+  });
+  await page.reload();
+  await page.waitForFunction(() => typeof gsBoot === "function");
+  await page.evaluate(() => { window.__reloads = 0; window.__gsStudentsReload = () => { window.__reloads += 1; }; });
+  expect(await page.evaluate(() => gsStudentChangedElsewhere())).toBe(false);
+  const before = await page.evaluate(() => gsLogAttempt({ activity: "practice", street: "full", userSec: 8, refSec: 8, diffSec: 0, correct: true, marginSec: 0.4 }));
+  expect(before).toBe(1);
+  // Another tab switches to the second student: storage changes under this tab.
+  await page.evaluate((second) => {
+    const registry = JSON.parse(localStorage.getItem("om-students"));
+    registry.active = second;
+    Storage.prototype.setItem.call(localStorage, "om-students", JSON.stringify(registry));
+    localStorage.setItem("om-attempt-log", "[]");                 // the second student's (empty) history
+  }, ids.second);
+  const saved = await page.evaluate(() => gsLogAttempt({ activity: "practice", street: "full", userSec: 9, refSec: 8, diffSec: 1, correct: false, marginSec: 0.4 }));
+  expect(saved).toBe(0);                                            // not written into CD2's history
+  expect(await page.evaluate(() => JSON.parse(localStorage.getItem("om-attempt-log")).length)).toBe(0);
+  expect(await page.evaluate(() => window.__reloads)).toBe(1);
+  expect(await page.evaluate(() => sessionStorage.getItem("gs-students-note"))).toContain("that try was not saved");
+});
+
+test("27.5: a tab that hears another tab switch student starts again", async ({ page, context }) => {
+  await openApp(page, { storage: { "om-client-code": "AB1" } });
+  await page.evaluate(() => {
+    const first = gsNewStudentId(), second = gsNewStudentId();
+    localStorage.setItem("om-students", JSON.stringify({ active: first, list: [{ id: first, code: "AB1", started: "" }, { id: second, code: "CD2", started: "" }], data: {}, a11y: 1 }));
+    window.__second = second;
+  });
+  await page.reload();
+  await page.waitForFunction(() => typeof gsBoot === "function");
+  await page.evaluate(() => { window.__reloads = 0; window.__gsStudentsReload = () => { window.__reloads += 1; }; });
+  const other = await context.newPage();
+  await other.goto("/index.html");
+  await other.waitForFunction(() => typeof gsBoot === "function");
+  await other.evaluate(() => {
+    const registry = JSON.parse(localStorage.getItem("om-students"));
+    registry.active = registry.list[1].id;
+    localStorage.setItem("om-students", JSON.stringify(registry));
+  });
+  await page.waitForFunction(() => window.__reloads === 1);
+  expect(await page.evaluate(() => sessionStorage.getItem("gs-students-note"))).toContain("changed in another tab");
+  await other.close();
+});
+
+test("27.6: with the browser's data lost and a backup present, the demo link brings back the real times and does not replace them", async ({ page }) => {
+  await openApp(page);
+  await setTimes(page, "5.5", "11", "0.4");
+  await page.evaluate(async () => { await gsStore.syncNow(); gsStore.simulateLoss(); });
+  await page.goto("/index.html?demo=1");
+  await page.waitForFunction(() => localStorage.getItem("om-full-time") === "11", null, { timeout: 15000 });
+  await page.waitForFunction(() => typeof gsBoot === "function" && document.getElementById("screen-practice") && !document.getElementById("screen-practice").hidden);
+  const state = await page.evaluate(async () => {
+    await gsStore.syncNow();
+    return { clear: localStorage.getItem("om-clear-time"), full: localStorage.getItem("om-full-time"), demo: localStorage.getItem("om-demo-times") };
+  });
+  expect(state).toEqual({ clear: "5.5", full: "11", demo: null });
+});
+
+test("27.6: a new visitor on the demo link still gets the example times and goes straight to practice", async ({ page }) => {
+  const errors = watchErrors(page);
+  await openApp(page, { query: "?demo=1" });
+  await expect(page.locator("#screen-practice")).toBeVisible();
+  expect(await page.evaluate(() => [localStorage.getItem("om-clear-time"), localStorage.getItem("om-full-time")])).toEqual(["4.0", "8.0"]);
+  expect(errors).toEqual([]);
+});
+
+test("27.7 and 27.9: a right code that cannot be saved, or cannot be checked, says so instead of 'Unlocked' or 'did not match'", async ({ page }) => {
+  await openApp(page, { locked: true });
+  await page.locator("#sessionCodeModalBtn, #sessionCodeLater").first().waitFor();
+  // 27.7: the code is right but the phone cannot save the unlock.
+  await page.evaluate(() => {
+    window.gsCodeCheck = async () => ({ id: "tester", ok: true });
+    const real = Storage.prototype.setItem;
+    window.__realSet = real;
+    Storage.prototype.setItem = function (key, value) { if (key === "om-session-unlock") throw new Error("QuotaExceededError"); return real.call(this, key, value); };
+    document.getElementById("sessionCodeModalInput").value = "any";
+  });
+  await page.evaluate(() => gsSessionCodeSubmit("modal"));
+  await expect(page.locator("#sessionCodeModalNote")).toHaveText("The code is right, but this phone could not save it. Free some space and try again.");
+  expect(await page.evaluate(() => ({ open: document.getElementById("sessionCodeModal").open, value: document.getElementById("sessionCodeModalInput").value, unlocked: gsIsUnlocked() })))
+    .toEqual({ open: true, value: "any", unlocked: false });
+  // 27.9: the page cannot check codes at all (http over Wi-Fi).
+  await page.evaluate(() => { window.gsCodeCheck = async () => ({ id: null, ok: false, reason: "unavailable" }); });
+  await page.evaluate(() => gsSessionCodeSubmit("modal"));
+  await expect(page.locator("#sessionCodeModalNote")).toContainText("This page cannot check codes");
+});
+
+test("27.9: the code check itself reports 'unavailable' on a page that is not secure", async ({ page }) => {
+  await openApp(page, { locked: true });
+  const result = await page.evaluate(async () => {
+    Object.defineProperty(window, "isSecureContext", { value: false, configurable: true });
+    return [await gsCodeCheck("12345"), await gsCodeCheck("")];
+  });
+  expect(result[0]).toEqual({ id: null, ok: false, reason: "unavailable" });
+  expect(result[1]).toBeNull();
+});
+
+test("27.8: after a valid code with no crossing times, focus lands on a control that works and the message says what is needed", async ({ page }) => {
+  await openApp(page, { locked: true });
+  await page.locator("#sessionCodeModalInput").waitFor();
+  await page.evaluate(() => { window.gsCodeCheck = async () => ({ id: "tester", ok: true }); document.getElementById("sessionCodeModalInput").value = "any"; });
+  await page.evaluate(() => gsSessionCodeSubmit("modal"));
+  await page.waitForFunction(() => ["homeOpenSettingsBtn", "tryDemoBtn"].includes(document.activeElement?.id));
+  const note = await page.evaluate(() => [...document.querySelectorAll("#sessionCodeNote, #sessionCodeModalNote")].map((n) => n.textContent).join(" "));
+  expect(note).toContain("Crossing times are needed before the activities open");
+  expect(await page.evaluate(() => gsIsUnlocked())).toBe(true);
+});
+
+test("27.8: with crossing times set, focus still goes to the first activity", async ({ page }) => {
+  await openApp(page, { locked: true, storage: { "om-clear-time": "4", "om-full-time": "8", "om-margin": "0.4" } });
+  await page.locator("#sessionCodeModalInput").waitFor();
+  await page.evaluate(() => { window.gsCodeCheck = async () => ({ id: "tester", ok: true }); document.getElementById("sessionCodeModalInput").value = "any"; });
+  await page.evaluate(() => gsSessionCodeSubmit("modal"));
+  await page.waitForFunction(() => document.activeElement?.classList.contains("step-button"));
+  expect(await page.evaluate(() => document.activeElement.disabled)).toBe(false);
+});
+
+test("27.11: with visual feedback on, the replay bar stays on screen for the replay", async ({ page }) => {
+  await openApp(page);
+  await setTimes(page);
+  const result = await page.evaluate(async () => {
+    a11ySettings.outputMode = "audio-visual";
+    a11ySettings.syncVisualReplay = true;
+    startSynchronizedVisualReplay([{ type: "user", timeSec: 0.2 }, { type: "acceptable", timeSec: 0.6 }], 1.5);
+    const startedBar = gsReplayBar.rafId !== null;
+    await new Promise((r) => setTimeout(r, 300));
+    return { startedBar, barStill: gsReplayBar.rafId !== null, flashes: visualReplayState.rafId !== null, events: gsReplayBar.events.length };
+  });
+  expect(result).toEqual({ startedBar: true, barStill: true, flashes: true, events: 2 });
+});
