@@ -275,7 +275,10 @@ test("iPhone (12.28, 13.2, 13.6): the cursor is sent to the native area as a pad
   await openAnswerPad(page);
   await page.waitForTimeout(150);
   const shows = await page.evaluate(() => window.__native.shows);
-  const answerShow = shows.find((s) => s.label.startsWith("Answer area"));
+  // Build 28 (tracker 27.19): the label now starts with the question, then
+  // the same instructions as before.
+  const answerShow = shows.find((s) => s.label.includes("Answer area"));
+  expect(answerShow.label.startsWith("Answer area")).toBe(false);
   expect(answerShow.focus).toBe(true);
   expect(answerShow.hint).toContain("Direct Touch");
   // Nothing under the area is focused: the page's title holds web focus, the

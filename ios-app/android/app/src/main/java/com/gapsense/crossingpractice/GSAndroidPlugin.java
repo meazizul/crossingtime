@@ -1,6 +1,12 @@
 package com.gapsense.crossingpractice;
 
 import android.content.Context;
+import android.content.res.Configuration;
+import android.media.AudioDeviceCallback;
+import android.media.AudioDeviceInfo;
+import android.os.Vibrator;
+import android.view.WindowManager;
+import android.webkit.JavascriptInterface;
 import android.graphics.Color;
 import android.media.AudioAttributes;
 import android.media.AudioManager;
@@ -51,6 +57,11 @@ public class GSAndroidPlugin extends Plugin {
     private TextToSpeech tts;
     private boolean ttsReady = false;
     private boolean ttsFailed = false;
+    private boolean ttsStarting = true;
+    private Runnable pendingSpeak = null;
+    private AudioDeviceCallback deviceCallback;
+    private boolean devicesSeen = false;
+    private final Handler speechHandler = new Handler(Looper.getMainLooper());
     private int utteranceCounter = 0;
     private final Map<String, PluginCall> speaking = new ConcurrentHashMap<>();
     private AccessibilityManager accessibilityManager;
@@ -68,10 +79,39 @@ public class GSAndroidPlugin extends Plugin {
                 try { getBridge().getWebView().getSettings().setTextZoom(100); } catch (Exception ignored) { }
             });
         } catch (Exception ignored) { }
+        // Build 28 (tracker 27.25): the phone's font size, there before the
+        // page first draws, so the first screen is the right size at once.
+        try {
+            getBridge().getWebView().addJavascriptInterface(new Object() {
+                @JavascriptInterface
+                public float textScale() {
+                    try { return getContext().getResources().getConfiguration().fontScale; } catch (RuntimeException error) { return 1f; }
+                }
+            }, "GSAndroidStart");
+        } catch (Exception ignored) { }
+        // Build 28 (tracker 27.18): headphones, Bluetooth or hearing aids
+        // connecting or dropping while a sound is being timed. The page
+        // cancels the try, as the iPhone app already does. The first report,
+        // which Android sends for the outputs already there, is skipped.
+        try {
+            final AudioManager audio = (AudioManager) getContext().getSystemService(Context.AUDIO_SERVICE);
+            if (audio != null) {
+                deviceCallback = new AudioDeviceCallback() {
+                    @Override public void onAudioDevicesAdded(AudioDeviceInfo[] added) { routeChanged(added); }
+                    @Override public void onAudioDevicesRemoved(AudioDeviceInfo[] removed) { routeChanged(removed); }
+                };
+                audio.registerAudioDeviceCallback(deviceCallback, speechHandler);
+            }
+        } catch (RuntimeException ignored) { }
         try {
             tts = new TextToSpeech(getContext(), status -> {
                 if (status == TextToSpeech.SUCCESS && tts != null) {
-                    int lang = tts.setLanguage(Locale.US);
+                    // Build 28 (tracker 27.15): the phone's own English when
+                    // it is set to English (UK, Australia, India), else US.
+                    Locale phone = Locale.getDefault();
+                    int lang = TextToSpeech.LANG_NOT_SUPPORTED;
+                    if (phone != null && "en".equals(phone.getLanguage())) lang = tts.setLanguage(phone);
+                    if (lang == TextToSpeech.LANG_MISSING_DATA || lang == TextToSpeech.LANG_NOT_SUPPORTED) lang = tts.setLanguage(Locale.US);
                     ttsReady = lang != TextToSpeech.LANG_MISSING_DATA && lang != TextToSpeech.LANG_NOT_SUPPORTED;
                     ttsFailed = !ttsReady;
                     tts.setOnUtteranceProgressListener(new UtteranceProgressListener() {
@@ -84,9 +124,17 @@ public class GSAndroidPlugin extends Plugin {
                 } else {
                     ttsFailed = true;
                 }
+                ttsStarting = false;
+                // Anything asked for while the engine was starting (the first
+                // "Get ready" after a cold start) is spoken now, or reported
+                // as not spoken.
+                Runnable waiting = pendingSpeak;
+                pendingSpeak = null;
+                if (waiting != null) speechHandler.post(waiting);
             });
         } catch (RuntimeException error) {
             ttsFailed = true;
+            ttsStarting = false;
         }
         // Build 24 (tracker 22.2): tell the page whenever TalkBack is turned on
         // or off, so the app changes at once instead of on the next launch.
@@ -120,7 +168,42 @@ public class GSAndroidPlugin extends Plugin {
 
     private void finish(String id) {
         PluginCall call = speaking.remove(id);
-        if (call != null) call.resolve();
+        if (call != null) resolveSpoken(call, true);
+    }
+
+    /* Tracker 27.15: the page must know when nothing was said, so the words
+     * can reach the student another way. */
+    private void resolveSpoken(PluginCall call, boolean spoken) {
+        com.getcapacitor.JSObject result = new com.getcapacitor.JSObject();
+        result.put("spoken", spoken);
+        call.resolve(result);
+    }
+
+    private void routeChanged(AudioDeviceInfo[] devices) {
+        if (!devicesSeen) { devicesSeen = true; return; }
+        boolean output = false;
+        if (devices != null) {
+            for (AudioDeviceInfo device : devices) {
+                if (device != null && device.isSink()) { output = true; break; }
+            }
+        }
+        if (!output) return;
+        com.getcapacitor.JSObject data = new com.getcapacitor.JSObject();
+        data.put("reason", "route");
+        notifyListeners("audioInterrupted", data);
+    }
+
+    /* Tracker 27.25: Font size, Display size or Bold text changed while the
+     * app is open. The activity now stays (see the manifest), and the page is
+     * told the new size. */
+    @Override
+    protected void handleOnConfigurationChanged(Configuration newConfig) {
+        super.handleOnConfigurationChanged(newConfig);
+        try {
+            com.getcapacitor.JSObject data = new com.getcapacitor.JSObject();
+            data.put("scale", (double) newConfig.fontScale);
+            notifyListeners("textScale", data);
+        } catch (RuntimeException ignored) { }
     }
 
     @Override
@@ -135,6 +218,12 @@ public class GSAndroidPlugin extends Plugin {
             try { tts.stop(); tts.shutdown(); } catch (RuntimeException ignored) { }
             tts = null;
         }
+        if (deviceCallback != null) {
+            try {
+                AudioManager audio = (AudioManager) getContext().getSystemService(Context.AUDIO_SERVICE);
+                if (audio != null) audio.unregisterAudioDeviceCallback(deviceCallback);
+            } catch (RuntimeException ignored) { }
+        }
         super.handleOnDestroy();
     }
 
@@ -144,9 +233,27 @@ public class GSAndroidPlugin extends Plugin {
         float rate = call.getFloat("rate", 1f);
         boolean interrupt = call.getBoolean("interrupt", true);
         final boolean accessibilityStream = "accessibility".equals(call.getString("usage", ""));
-        if (text == null || text.isEmpty() || tts == null || !ttsReady) {
-            // No engine (or not ready yet): the page's own timeout takes over.
-            call.resolve();
+        if (text == null || text.isEmpty()) {
+            resolveSpoken(call, false);
+            return;
+        }
+        if (tts != null && !ttsReady && !ttsFailed && ttsStarting) {
+            // Still starting (27.15): wait for it, for 3 seconds at most. A
+            // newer request replaces an older one that is still waiting.
+            final Runnable retry = () -> speak(call);
+            pendingSpeak = retry;
+            speechHandler.postDelayed(() -> {
+                if (pendingSpeak == retry) {
+                    pendingSpeak = null;
+                    resolveSpoken(call, false);
+                }
+            }, 3000);
+            return;
+        }
+        if (tts == null || !ttsReady) {
+            // No engine, or no English voice: say so, and the page shows the
+            // words or hands them to the screen reader.
+            resolveSpoken(call, false);
             return;
         }
         final String id = "gs-" + (++utteranceCounter);
@@ -187,6 +294,41 @@ public class GSAndroidPlugin extends Plugin {
         com.getcapacitor.JSObject result = new com.getcapacitor.JSObject();
         result.put("ready", ttsReady);
         result.put("failed", ttsFailed);
+        result.put("starting", ttsStarting && !ttsReady && !ttsFailed);
+        call.resolve(result);
+    }
+
+    /* keepAwake (build 28, tracker 27.16): the screen stays on while a try or
+     * a pad needs it, as on the iPhone. The web wake lock that was used until
+     * now is refused under Battery Saver and by some web view versions. */
+    @PluginMethod
+    public void keepAwake(PluginCall call) {
+        final boolean on = call.getBoolean("on", false);
+        getActivity().runOnUiThread(() -> {
+            try {
+                Window window = getActivity().getWindow();
+                if (on) window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+                else window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+                com.getcapacitor.JSObject result = new com.getcapacitor.JSObject();
+                result.put("on", on);
+                call.resolve(result);
+            } catch (RuntimeException error) {
+                call.reject("keep awake failed");
+            }
+        });
+    }
+
+    /* deviceStatus (build 28, tracker 27.14): can this device vibrate at all?
+     * A tablet often cannot, and the app used to say vibration was working. */
+    @PluginMethod
+    public void deviceStatus(PluginCall call) {
+        com.getcapacitor.JSObject result = new com.getcapacitor.JSObject();
+        boolean vibrator = true;
+        try {
+            Vibrator service = (Vibrator) getContext().getSystemService(Context.VIBRATOR_SERVICE);
+            vibrator = service != null && service.hasVibrator();
+        } catch (RuntimeException ignored) { }
+        result.put("hasVibrator", vibrator);
         call.resolve(result);
     }
 
@@ -252,8 +394,6 @@ public class GSAndroidPlugin extends Plugin {
      * resolves { heard: false } and the page keeps its estimate. maxMs is the
      * longest it ever waits.
      */
-    private final Handler speechHandler = new Handler(Looper.getMainLooper());
-
     private boolean accessibilityAudioPlaying(AudioManager audio) {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return false;
         try {

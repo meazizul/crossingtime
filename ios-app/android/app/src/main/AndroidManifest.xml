@@ -10,7 +10,7 @@
         android:theme="@style/AppTheme">
 
         <activity
-            android:configChanges="orientation|keyboardHidden|keyboard|screenSize|locale|smallestScreenSize|screenLayout|uiMode|navigation"
+            android:configChanges="orientation|keyboardHidden|keyboard|screenSize|locale|smallestScreenSize|screenLayout|uiMode|navigation|fontScale|density|fontWeightAdjustment"
             android:name=".MainActivity"
             android:label="@string/title_activity_main"
             android:theme="@style/AppTheme.NoActionBarLaunch"
@@ -57,4 +57,13 @@
          so it is not optional for this app. (No microphone: the background
          noise check was removed in build 7.) -->
     <uses-permission android:name="android.permission.VIBRATE" />
+
+    <!-- Build 28 (tracker 27.15): Android 11 and later hide other apps from
+         an app unless it names them. Without this, the phone's
+         text-to-speech engine may not be found on some phones. -->
+    <queries>
+        <intent>
+            <action android:name="android.intent.action.TTS_SERVICE" />
+        </intent>
+    </queries>
 </manifest>

@@ -1014,6 +1014,8 @@ async function gsConfirmDeleteHistory() {
   // cannot be written, the app says so; the deletion stays marked, so the
   // old history is never restored, and the copy is rewritten at a later
   // start.
+  // Tracker 27.37: report and CSV files exported earlier go too.
+  try { if (typeof gsClearExports === "function") await gsClearExports(); } catch (error) { /* none left to clear */ }
   let durable = true;
   try {
     const result = await window.gsStore?.clearHistoryNow?.();

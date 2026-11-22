@@ -444,3 +444,129 @@ test("27.17: on Android, cancelling a try stops the vibration pulses still to co
   await page.clock.runFor(2000);
   expect(await page.evaluate(() => window.__vibrations.length)).toBe(pulses);
 });
+
+/* ---------------- fourth batch: Android shell and exports (27.14, 27.15, 27.16, 27.25, 27.31, 27.37) ---------------- */
+
+function androidShell({ vibrator = true, spoken = true, speech = { ready: true, failed: false, starting: false }, startScale = 1 } = {}) {
+  return ([hasVibrator, isSpoken, speechStatus, scale]) => {
+    window.__android = { speak: [], awake: [], files: {}, deleted: [], shared: [], listeners: {} };
+    window.GSAndroidStart = { textScale: () => scale };
+    window.Capacitor = {
+      isNativePlatform: () => true, getPlatform: () => "android",
+      Plugins: {
+        Haptics: { vibrate: async () => {}, impact: async () => {} },
+        GSAndroid: {
+          speak: async (a) => { window.__android.speak.push(a.text); return { spoken: isSpoken }; },
+          stopSpeaking: async () => {}, accessibilityStatus: async () => ({ screenReader: false }), setWindowBackground: async () => {},
+          textScale: async () => ({ scale }), speechStatus: async () => speechStatus,
+          deviceStatus: async () => ({ hasVibrator }),
+          keepAwake: async (a) => { window.__android.awake.push(a.on); return { on: a.on }; },
+          addListener: (name, fn) => { window.__android.listeners[name] = fn; return { remove: () => {} }; }
+        },
+        Filesystem: {
+          writeFile: async ({ path }) => { window.__android.files[path] = true; return { uri: `file:///cache/${path}` }; },
+          deleteFile: async ({ path }) => { if (!window.__android.files[path]) throw new Error("no file"); delete window.__android.files[path]; window.__android.deleted.push(path); },
+          rmdir: async ({ path }) => { Object.keys(window.__android.files).filter((f) => f.startsWith(`${path}/`)).forEach((f) => { delete window.__android.files[f]; window.__android.deleted.push(f); }); },
+          readdir: async () => ({ files: Object.keys(window.__android.files).filter((f) => !f.includes("/")).map((name) => ({ name })) }),
+          readFile: async () => { throw new Error("no file"); }
+        },
+        Preferences: { get: async () => ({ value: null }), set: async () => {} },
+        Share: { share: async (a) => { window.__android.shared.push(a.files[0]); } },
+        App: { getInfo: async () => ({ version: "1.0", build: "28" }), addListener: () => {}, getLaunchUrl: async () => ({}) },
+        StatusBar: { setStyle: async () => {} }
+      }
+    };
+  };
+}
+const shellArgs = (o = {}) => [o.vibrator ?? true, o.spoken ?? true, o.speech ?? { ready: true, failed: false, starting: false }, o.startScale ?? 1];
+
+test("27.14: a device that cannot vibrate says so in Accessibility, and the test button does not claim pulses", async ({ page }) => {
+  await page.addInitScript(androidShell(), shellArgs({ vibrator: false }));
+  await openApp(page);
+  await page.waitForFunction(() => gsDeviceCanVibrate === false);
+  await expect(page.locator("#hapticsSupportNote")).toHaveText("This device cannot vibrate. Use sound or the screen.");
+  await page.evaluate(() => document.getElementById("hapticsTestBtn").click());
+  await expect(page.locator("#cueBannerText")).toHaveText("This device cannot vibrate. Use sound or the screen.");
+  expect(await page.evaluate(() => hapticsAvailable())).toBe(false);
+});
+
+test("27.14: a phone with a vibrator is unchanged", async ({ page }) => {
+  await page.addInitScript(androidShell(), shellArgs({ vibrator: true }));
+  await openApp(page);
+  await page.waitForFunction(() => gsDeviceCanVibrate === true);
+  await expect(page.locator("#hapticsSupportNote")).toContainText("Native vibration active");
+  expect(await page.evaluate(() => hapticsAvailable())).toBe(true);
+});
+
+test("27.15: when Android spoke nothing, the words reach the student through the live region and Accessibility says why", async ({ page }) => {
+  await page.addInitScript(androidShell(), shellArgs({ spoken: false, speech: { ready: false, failed: true, starting: false } }));
+  await openApp(page);
+  await page.waitForFunction(() => gsSpeechUnavailable === true);
+  await expect(page.locator("#speechVoiceNote")).toBeHidden();      // inside the closed Accessibility pop-up
+  expect(await page.evaluate(() => document.getElementById("speechVoiceNote").textContent)).toContain("no English voice");
+  await page.evaluate(() => gsSpeak("You were 0.4 seconds early."));
+  await page.waitForFunction(() => document.getElementById("srAnnouncer").textContent.includes("0.4 seconds early"));
+  expect(await page.evaluate(() => window.__android.speak)).toEqual(["You were 0.4 seconds early."]);
+});
+
+test("27.15: with a working voice nothing is repeated in the live region and no note shows", async ({ page }) => {
+  await page.addInitScript(androidShell(), shellArgs());
+  await openApp(page);
+  await page.evaluate(() => gsSpeak("You were 0.4 seconds early."));
+  await page.waitForFunction(() => window.__android.speak.length === 1);
+  await page.waitForTimeout(200);
+  expect(await page.evaluate(() => ({ live: document.getElementById("srAnnouncer").textContent, flag: gsSpeechUnavailable, note: document.getElementById("speechVoiceNote").hidden })))
+    .toEqual({ live: "", flag: false, note: true });
+});
+
+test("27.16: on Android the screen is kept awake through the app's own call, on and off", async ({ page }) => {
+  await page.addInitScript(androidShell(), shellArgs());
+  await openApp(page);
+  await page.evaluate(async () => { await gsKeepAwake(true); await gsKeepAwake(false); });
+  expect(await page.evaluate(() => window.__android.awake)).toEqual([true, false]);
+});
+
+test("27.25: the phone's font size is there before the first screen, and a change while the app is open is followed", async ({ page }) => {
+  await page.addInitScript(androidShell(), shellArgs({ startScale: 2 }));
+  await openApp(page);
+  expect(await page.evaluate(() => gsPhoneTextScale)).toBe(2);
+  const before = await page.evaluate(() => parseFloat(getComputedStyle(document.documentElement).fontSize));
+  await page.evaluate(() => window.__android.listeners.textScale({ scale: 1.3 }));
+  const after = await page.evaluate(() => ({ scale: gsPhoneTextScale, px: parseFloat(getComputedStyle(document.documentElement).fontSize) }));
+  expect(after.scale).toBe(1.3);
+  expect(after.px).toBeLessThan(before);
+});
+
+test("27.18: on Android a change of sound output during a timed sound cancels the try", async ({ page }) => {
+  await page.addInitScript(androidShell(), shellArgs());
+  await openApp(page);
+  await setTimes(page);
+  const heard = await page.evaluate(() => new Promise((resolve) => {
+    window.addEventListener("gs-audio-interrupted", () => resolve(true), { once: true });
+    window.__android.listeners.audioInterrupted({ reason: "route" });
+    setTimeout(() => resolve(false), 500);
+  }));
+  expect(heard).toBe(true);
+});
+
+test("27.31 and 27.37: an exported file is written in the reports folder and deleted once the share sheet closes; Delete history clears what is left", async ({ page }) => {
+  await page.addInitScript(androidShell(), shellArgs());
+  await openApp(page);
+  await setTimes(page);
+  const outcome = await page.evaluate(() => gsShareFile({ name: "crossingtime-report-AB1-2026-11-22.csv", text: "a,b", mime: "text/csv" }));
+  expect(outcome).toBe("shared");
+  let state = await page.evaluate(() => window.__android);
+  expect(state.shared).toEqual(["file:///cache/reports/crossingtime-report-AB1-2026-11-22.csv"]);
+  expect(state.deleted).toEqual(["reports/crossingtime-report-AB1-2026-11-22.csv"]);
+  expect(Object.keys(state.files)).toEqual([]);
+  // Left over from an earlier build (top of the cache) and from a share that never returned.
+  await page.evaluate(async () => {
+    window.__android.files["crossingtime-report-2026-11-01.csv"] = true;
+    window.__android.files["reports/crossingtime-report-old.csv"] = true;
+    window.__android.files["something-else.txt"] = true;
+    await gsConfirmDeleteHistory();
+  });
+  state = await page.evaluate(() => window.__android);
+  // (The mock also holds the app's own history copy, which is not an export.)
+  expect(Object.keys(state.files).filter((f) => /\.(csv|txt)$/.test(f))).toEqual(["something-else.txt"]);
+});

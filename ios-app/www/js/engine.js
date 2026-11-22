@@ -165,6 +165,7 @@
     // (iPhone) or high-contrast text reaches the page as prefers-contrast.
     const prefersMoreContrast = window.matchMedia("(prefers-contrast: more)");
     let gsPhoneTextScale = 1;
+    gsReadAndroidStartScale();
 
     const VISUAL_PULSE_SEC = 0.2;
     const VISUAL_REPLAY_PRE_DELAY_SEC = 0.5; // screen stays normal this long before going black
@@ -287,8 +288,30 @@
       reference_bad: [[0, 550]]
     };
 
+    /* Tracker 27.14: null until the shell has answered; false on an iPad or
+     * a tablet with no vibration motor. */
+    let gsDeviceCanVibrate = null;
+    const GS_NO_VIBRATION = "This device cannot vibrate. Use sound or the screen.";
+
     function hapticsAvailable() {
+      if (gsDeviceCanVibrate === false) return false;
       return (isNativeShell && Boolean(GSNativePlugin || HapticsPlugin)) || hasWebVibrate;
+    }
+
+    function gsCheckVibration() {
+      const done = (can) => {
+        if (typeof can !== "boolean") return;
+        gsDeviceCanVibrate = can;
+        const note = document.getElementById("hapticsSupportNote");
+        if (note) note.textContent = describeHapticsSupport();
+      };
+      try {
+        if (isNativeShell && nativePlatform === "ios" && typeof GSNativePlugin?.audioStatus === "function") {
+          Promise.resolve(GSNativePlugin.audioStatus()).then((status) => done(status?.hapticsSupported)).catch(() => {});
+        } else if (isNativeShell && nativePlatform === "android" && typeof CapacitorGlobal?.Plugins?.GSAndroid?.deviceStatus === "function") {
+          Promise.resolve(CapacitorGlobal.Plugins.GSAndroid.deviceStatus()).then((status) => done(status?.hasVibrator)).catch(() => {});
+        }
+      } catch (error) { /* older shell: as before */ }
     }
 
     /*
@@ -308,6 +331,7 @@
      */
 
     function describeHapticsSupport() {
+      if (gsDeviceCanVibrate === false) return GS_NO_VIBRATION;
       if (isNativeShell && GSNativePlugin) {
         return "Native haptics active. If you feel nothing, check iPhone Settings, Accessibility, Touch, Vibration, and Settings, Sounds and Haptics, System Haptics.";
       }
@@ -1610,13 +1634,46 @@
      * cache first), or download it in a browser. Returns "shared",
      * "downloaded", "copied", "cancelled" or "failed" (tracker F3).
      */
+    const GS_EXPORT_FOLDER = "reports";
+
+    /* Tracker 27.37: no exported report or CSV is left on the phone after
+     * "Delete history" or "Remove student" (or from an earlier build, which
+     * wrote them to the top of the cache). */
+    async function gsClearExports() {
+      const Filesystem = CapacitorGlobal?.Plugins?.Filesystem;
+      if (!isNativeShell || !Filesystem) return 0;
+      let removed = 0;
+      try {
+        await Filesystem.rmdir({ path: GS_EXPORT_FOLDER, directory: "CACHE", recursive: true });
+        removed += 1;
+      } catch (error) { /* no folder: nothing was exported */ }
+      try {
+        const listing = await Filesystem.readdir({ path: "", directory: "CACHE" });
+        for (const entry of listing?.files || []) {
+          const file = typeof entry === "string" ? entry : entry?.name;
+          if (!file || !/^(crossingtime|gapsense)-report.*\.(csv|txt)$/i.test(file)) continue;
+          try { await Filesystem.deleteFile({ path: file, directory: "CACHE" }); removed += 1; } catch (error) { /* gone already */ }
+        }
+      } catch (error) { /* nothing to list */ }
+      return removed;
+    }
+
     async function gsShareFile({ name, text, mime = "text/plain", title = name }) {
       const SharePlugin = CapacitorGlobal?.Plugins?.Share;
       const Filesystem = CapacitorGlobal?.Plugins?.Filesystem;
       try {
         if (isNativeShell && SharePlugin?.share && Filesystem?.writeFile) {
-          const written = await Filesystem.writeFile({ path: name, data: text, directory: "CACHE", encoding: "utf8", recursive: true });
-          await SharePlugin.share({ title, dialogTitle: title, files: [written.uri] });
+          // Build 28: one folder for every exported file (tracker 27.31: on
+          // Android it is the only folder the share sheet may read), and
+          // the file is deleted once the share sheet has closed, whatever
+          // the student did there (27.37).
+          const path = `${GS_EXPORT_FOLDER}/${name}`;
+          const written = await Filesystem.writeFile({ path, data: text, directory: "CACHE", encoding: "utf8", recursive: true });
+          try {
+            await SharePlugin.share({ title, dialogTitle: title, files: [written.uri] });
+          } finally {
+            try { await Filesystem.deleteFile({ path, directory: "CACHE" }); } catch (cleanup) { /* cleared with the folder later */ }
+          }
           return "shared";
         }
       } catch (error) {
@@ -2070,9 +2127,30 @@
       }
     }
 
+    /* Build 28 (tracker 27.25): the Android shell hands over the phone's font
+     * size before the first screen is drawn, so nothing jumps after launch. */
+    function gsReadAndroidStartScale() {
+      try {
+        const scale = Number(window.GSAndroidStart?.textScale?.());
+        if (Number.isFinite(scale) && scale > 0) gsPhoneTextScale = scale;
+      } catch (error) { /* older shell: read a moment later, as before */ }
+    }
+
     function gsReadAndroidTextScale() {
       const android = nativePlatform === "android" ? CapacitorGlobal?.Plugins?.GSAndroid : null;
       if (!android || typeof android.textScale !== "function") return;
+      // And while the app is open: the page stays, and takes the new size.
+      if (!gsReadAndroidTextScale.listening && typeof android.addListener === "function") {
+        gsReadAndroidTextScale.listening = true;
+        try {
+          android.addListener("textScale", (event) => {
+            const scale = Number(event?.scale);
+            if (!Number.isFinite(scale) || scale <= 0) return;
+            gsPhoneTextScale = scale;
+            if (a11ySettings.textSize === "system") applyA11ySettings();
+          });
+        } catch (error) { /* older shell */ }
+      }
       try {
         Promise.resolve(android.textScale()).then((result) => {
           const scale = Number(result?.scale);
@@ -2806,6 +2884,31 @@
       return gsSpeakPhone(text, { done, interrupt, maxWaitMs, onDone });
     }
 
+    /* Tracker 27.15: the phone has no voice the app can use. Said in
+     * Accessibility, under Speech, in plain words. */
+    let gsSpeechUnavailable = false;
+    const GS_NO_VOICE = "This phone has no English voice the app can use. The app's recorded sentences are still spoken; other words are shown on the screen and given to TalkBack. To add a voice: Android Settings, Accessibility, Text-to-speech output.";
+
+    function gsShowSpeechNote() {
+      const note = document.getElementById("speechVoiceNote");
+      if (!note) return;
+      note.hidden = !gsSpeechUnavailable;
+      note.textContent = gsSpeechUnavailable ? GS_NO_VOICE : "";
+    }
+
+    /* Asked at start and whenever "Speak directions aloud" is turned on. */
+    function gsCheckSpeechEngine({ announce = false } = {}) {
+      const android = nativePlatform === "android" ? CapacitorGlobal?.Plugins?.GSAndroid : null;
+      if (!android || typeof android.speechStatus !== "function") return;
+      const ask = (again) => Promise.resolve(android.speechStatus()).then((status) => {
+        if (status?.starting && again > 0) { setTimeout(() => ask(again - 1), 1000); return; }
+        gsSpeechUnavailable = Boolean(status && (status.failed || !status.ready));
+        gsShowSpeechNote();
+        if (gsSpeechUnavailable && announce) announceScreenReader(GS_NO_VOICE, { force: true, speak: false });
+      }).catch(() => {});
+      ask(4);
+    }
+
     /* The phone's own voice: any text at all. */
     function gsSpeakPhone(text, { done, interrupt, maxWaitMs, onDone }) {
       if (nativeSpeech) {
@@ -2819,7 +2922,17 @@
           done();
         };
         Promise.resolve(nativeSpeechCall("speak", { text, rate: Number(a11ySettings.speechRate) || 1, interrupt }))
-          .then(finish, finish);
+          .then((result) => {
+            // Tracker 27.15: Android says when nothing was spoken (no speech
+            // engine, or no English voice). The words then go to the live
+            // region, where a screen reader or the banner carries them.
+            if (result && result.spoken === false && nativeSpeechToken === token) {
+              gsSpeechUnavailable = true;
+              gsShowSpeechNote();
+              try { announceScreenReader(text, { force: true, speak: false }); } catch (error) { /* the screen still shows it */ }
+            }
+            finish();
+          }, finish);
         if (onDone) setTimeout(done, maxWaitMs);
         return true;
       }
@@ -4011,6 +4124,7 @@
       a11ySettings.selfVoice = a11ySelfVoice.checked;
       localStorage.setItem("om-a11y-self-voice", String(a11ySettings.selfVoice));
       if (a11ySettings.selfVoice) {
+        gsCheckSpeechEngine({ announce: true });
         gsSpeak(speechAvailable()
           ? "Speaking directions aloud is on."
           : "");
@@ -4134,8 +4248,9 @@
     let hapticsTestRunning = false;
     hapticsTestBtn.addEventListener("click", () => {
       if (!hapticsAvailable()) {
-        setStatus("No haptics available on this platform.", "warn");
-        announceScreenReader("No haptics available on this platform.");
+        const none = gsDeviceCanVibrate === false ? GS_NO_VIBRATION : "No haptics available on this platform.";
+        setStatus(none, "warn");
+        announceScreenReader(none);
         return;
       }
       // Tracker 27.30: a second press during the test used to read the
@@ -4173,6 +4288,8 @@
       applyA11ySettings();
     });
     gsReadAndroidTextScale();
+    gsCheckVibration();
+    gsCheckSpeechEngine();
     {
       // In a browser the choice follows the browser's own text size.
       const followOption = a11yTextSize?.querySelector('option[value="system"]');
@@ -4292,6 +4409,16 @@
         nativeCall("keepAwake", { on: gsWakeWanted });
         return;
       }
+      // Build 28 (tracker 27.16): Android's own keep-awake. The web wake
+      // lock below is refused under Battery Saver and by some web views; it
+      // is still asked for when the app's own call fails.
+      const androidShell = isNativeShell && nativePlatform === "android" ? CapacitorGlobal?.Plugins?.GSAndroid : null;
+      if (androidShell && typeof androidShell.keepAwake === "function") {
+        try {
+          await androidShell.keepAwake({ on: gsWakeWanted });
+          return;
+        } catch (error) { /* the web lock below */ }
+      }
       try {
         if (gsWakeWanted && !gsWakeLock && navigator.wakeLock) {
           const lock = await navigator.wakeLock.request("screen");
@@ -4365,6 +4492,13 @@
     async function gsRefreshAudioStatus() {
       const status = await gsNativeAudioStatus();
       if (status && Number.isFinite(status.outputLatency)) nativeOutputLatency = status.outputLatency;
+    }
+    // Build 28 (tracker 27.18): the Android app says when the sound's output
+    // changes (headphones, Bluetooth, hearing aids connecting or dropping).
+    if (isNativeShell && nativePlatform === "android" && typeof CapacitorGlobal?.Plugins?.GSAndroid?.addListener === "function") {
+      try {
+        CapacitorGlobal.Plugins.GSAndroid.addListener("audioInterrupted", (event) => { gsAudioInterrupted(event?.reason || "native"); });
+      } catch (error) { /* the web clock check still runs */ }
     }
     if (nativeSound && typeof GSNativePlugin?.addListener === "function") {
       try {

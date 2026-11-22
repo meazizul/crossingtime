@@ -318,6 +318,9 @@ function gsStudentsRemoveActive() {
   }
   // Removing frees space, so it fits; still all or nothing.
   const done = gsStudentsTransaction(next ? registry : null, nextSnap);
+  // Tracker 27.37: the removed student's exported report and CSV files are
+  // not left in the phone's cache.
+  if (done.ok && typeof gsClearExports === "function") gsClearExports().catch(() => {});
   return done.ok ? { removed: leaving, next } : { removed: null, next: null, message: done.message };
 }
 

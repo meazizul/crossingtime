@@ -1,5 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- Build 28 (tracker 27.31): only the one folder the report and CSV files
+     are written to before they are shared. The whole shared storage and the
+     whole cache used to be open to the share sheet's file links. -->
 <paths xmlns:android="http://schemas.android.com/apk/res/android">
-    <external-path name="my_images" path="." />
-    <cache-path name="my_cache_images" path="." />
+    <cache-path name="reports" path="reports/" />
 </paths>
