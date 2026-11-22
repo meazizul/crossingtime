@@ -491,7 +491,9 @@ function gsDirectTouchTarget() {
     return {
       area: surface,
       handlers: () => (gsSwipeHandlers.get(answer) || (() => ({})))(),
-      label: GS_PAD_LABELS.answer
+      // Tracker 27.19: the question first, as on the web area. VoiceOver
+      // reads this label when focus lands on the iPhone's own touch area.
+      label: gsAnswerPad.title ? `${gsAnswerPad.title} ${GS_PAD_LABELS.answer}` : GS_PAD_LABELS.answer
     };
   }
   const live = document.getElementById("liveOverlay");
@@ -804,6 +806,12 @@ function gsPadReadOpen(overlay) {
     body.appendChild(p);
   });
   panel.gsFrom = overlay;
+  // Tracker 27.21: the panel says it is modal, so the pad behind it must not
+  // be reachable. Two Shift+Tab presses used to land on the pad's Back
+  // button, and Enter there closed the pad and lost the question.
+  panel.gsFocusBack = overlay.contains(document.activeElement) ? document.activeElement : null;
+  panel.gsMadeInert = !panel.contains(overlay) && !overlay.contains(panel) && !overlay.inert;
+  if (panel.gsMadeInert) overlay.inert = true;
   panel.hidden = false;
   body.scrollTop = 0;
   title.focus({ preventScroll: true });
@@ -816,8 +824,16 @@ function gsPadReadClose() {
   if (!panel || panel.hidden) return false;
   panel.hidden = true;
   const from = panel.gsFrom;
+  const back = panel.gsFocusBack;
   panel.gsFrom = null;
-  if (from && !from.hidden) from.querySelector(".gesture-title")?.focus({ preventScroll: true });
+  panel.gsFocusBack = null;
+  if (from && panel.gsMadeInert) from.inert = false;
+  panel.gsMadeInert = false;
+  if (from && !from.hidden) {
+    // Back where the student was (27.21), or the pad's title if that has gone.
+    const target = back && from.contains(back) && !back.hidden && !back.disabled ? back : from.querySelector(".gesture-title");
+    target?.focus({ preventScroll: true });
+  }
   return true;
 }
 
@@ -832,12 +848,19 @@ const gsSwipeHandlers = new Map();
 
 function gsBindSwipeSurface(surface, getHandlers) {
   gsSwipeHandlers.set(surface, getHandlers);
-  const swipe = { active: false, x: 0, y: 0, id: null, lastUpAt: 0 };
+  const swipe = { active: false, x: 0, y: 0, id: null, lastUpAt: 0, downAt: 0 };
   // Controls keep their own behavior; the title and Back are excluded so that a
   // screen-reader double tap on them can never count as an answer.
   const isControl = (target) => Boolean(target?.closest?.("button, select, a, input, label, summary, .gesture-title, .gesture-header"));
   surface.addEventListener("pointerdown", (event) => {
     if (isControl(event.target) || gsPadReadIsOpen()) return;
+    // Tracker 27.26: one gesture at a time. A second finger or the palm
+    // touching while the first finger is down used to start the gesture
+    // again, moving the timing moment to the later touch and losing the
+    // first finger's lift. The first touch is kept, as on the iPhone's own
+    // touch area. (A gesture whose end never arrived is dropped after 10 s
+    // so the pad cannot be left dead.)
+    if (swipe.active && performance.now() - swipe.downAt < 10000) return;
     swipe.active = true;
     swipe.x = event.clientX;
     swipe.y = event.clientY;
@@ -888,7 +911,11 @@ function gsBindSwipeSurface(surface, getHandlers) {
       handlers[kind](swipe.downAt);
     }
   });
-  surface.addEventListener("pointercancel", () => { swipe.active = false; clearTimeout(swipe.holdTimer); });
+  surface.addEventListener("pointercancel", (event) => {
+    if (swipe.active && event.pointerId !== undefined && event.pointerId !== swipe.id) return;   // the other finger
+    swipe.active = false;
+    clearTimeout(swipe.holdTimer);
+  });
   // A screen reader's double-tap arrives as a click with no pointer sequence
   // of its own (TalkBack; VoiceOver with Direct Touch off): it counts as a
   // tap. A click that follows a pointer sequence is that same tap, ignored.
@@ -929,6 +956,7 @@ function gsOpenAnswerPad({ title, onAnswer, onBack = null, onSkip = null }) {
   if (!overlay) return;
   gsAnswerPad.onAnswer = onAnswer;
   gsAnswerPad.onBack = onBack || onSkip;
+  gsAnswerPad.title = title || "";
   const question = document.getElementById("answerQuestion");
   if (question) question.textContent = title;
   const surface = document.getElementById("answerSurface");

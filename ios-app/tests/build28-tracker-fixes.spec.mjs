@@ -327,3 +327,120 @@ test("27.11: with visual feedback on, the replay bar stays on screen for the rep
   });
   expect(result).toEqual({ startedBar: true, barStill: true, flashes: true, events: 2 });
 });
+
+/* ---------------- third batch: 27.17, 27.19, 27.20, 27.21, 27.26 ---------------- */
+
+test("27.26: with a finger down on the pad a second touch changes nothing; the first finger's lift answers, timed from its touch", async ({ page }) => {
+  await openApp(page);
+  const result = await page.evaluate(async () => {
+    const surface = document.createElement("div");
+    surface.style.cssText = "position:fixed;left:0;top:0;width:300px;height:300px;";
+    document.body.appendChild(surface);
+    const got = [];
+    gsBindSwipeSurface(surface, () => ({ up: (at) => got.push(["up", at]), tap: (at) => got.push(["tap", at]), down: (at) => got.push(["down", at]) }));
+    const fire = (type, id, x, y, primary) => surface.dispatchEvent(new PointerEvent(type, { pointerId: id, clientX: x, clientY: y, isPrimary: primary, bubbles: true, pointerType: "touch" }));
+    const t0 = performance.now();
+    fire("pointerdown", 1, 150, 250, true);            // the answering finger
+    await new Promise((r) => setTimeout(r, 120));
+    fire("pointerdown", 2, 20, 20, false);             // a resting finger or the palm
+    fire("pointerup", 2, 20, 20, false);
+    await new Promise((r) => setTimeout(r, 60));
+    fire("pointerup", 1, 150, 100, true);              // swipe up with the first finger
+    return { got, t0, t1: performance.now() };
+  });
+  expect(result.got.length).toBe(1);
+  expect(result.got[0][0]).toBe("up");
+  expect(result.got[0][1] - result.t0).toBeLessThan(60);     // from the first touch, not the second
+});
+
+test("27.21: the pad behind 'Read it larger' cannot be reached while the panel is open, and focus goes back where it was", async ({ page }) => {
+  await openApp(page);
+  await setTimes(page);
+  const result = await page.evaluate(() => {
+    gsOpenAnswerPad({ title: "Was the sample longer or shorter than your crossing?", onAnswer: () => {} });
+    const overlay = document.getElementById("answerOverlay");
+    const surface = document.getElementById("answerSurface");
+    surface.focus();
+    const out = { before: document.activeElement === surface };
+    out.opened = gsPadReadOpen(overlay);
+    out.inertWhileOpen = overlay.inert === true;
+    out.focusInPanel = document.getElementById("padReadOverlay").contains(document.activeElement);
+    gsPadReadClose();
+    out.inertAfter = overlay.inert === true;
+    out.focusBack = document.activeElement === surface;
+    return out;
+  });
+  expect(result).toEqual({ before: true, opened: true, inertWhileOpen: true, focusInPanel: true, inertAfter: false, focusBack: true });
+});
+
+test("27.19: the label sent to the iPhone's touch area starts with the question", async ({ page }) => {
+  await openApp(page);
+  await setTimes(page);
+  const label = await page.evaluate(() => {
+    gsOpenAnswerPad({ title: "Was the sample longer or shorter than your crossing?", onAnswer: () => {} });
+    return gsDirectTouchTarget()?.label || "";
+  });
+  expect(label.startsWith("Was the sample longer or shorter than your crossing? ")).toBe(true);
+  expect(label).toContain(await page.evaluate(() => GS_PAD_LABELS.answer));
+});
+
+test("27.20: when the iPhone says VoiceOver did not finish, the replay tones wait a bounded time; when it finished, they do not", async ({ page }) => {
+  await page.addInitScript(() => {
+    window.__finished = false;
+    window.Capacitor = {
+      isNativePlatform: () => true, getPlatform: () => "ios",
+      Plugins: {
+        GSNative: {
+          haptic: async () => {}, pendingScreen: async () => ({}), tone: async () => ({ id: 1 }), sustainStart: async () => ({ id: 1 }), sustainStop: async () => {}, stopSound: async () => {},
+          audioStatus: async () => ({ engineRunning: true, ignoresSilentSwitch: true, outputVolume: 1, outputLatency: 0, route: "Speaker", peak: 0, tonesStarted: 0 }),
+          speak: async () => {}, stopSpeaking: async () => {}, accessibilityStatus: async () => ({ voiceOver: true }),
+          announce: async () => ({ finished: window.__finished }),
+          addListener: () => ({ remove: () => {} })
+        },
+        App: { getInfo: async () => ({ version: "1.0", build: "28" }), addListener: () => {}, getLaunchUrl: async () => ({}) },
+        StatusBar: { setStyle: async () => {} }
+      }
+    };
+  });
+  await openApp(page);
+  const timeFor = (finished) => page.evaluate((f) => new Promise((resolve) => {
+    window.__finished = f;
+    const t0 = performance.now();
+    gsScreenReaderSay("Replay.", { onDone: () => resolve(performance.now() - t0) });
+  }), finished);
+  const cut = await timeFor(false);
+  const whole = await timeFor(true);
+  expect(cut).toBeGreaterThan(550);        // waited for the words
+  expect(cut).toBeLessThan(2700);          // but never long
+  expect(whole).toBeLessThan(200);
+});
+
+test("27.17: on Android, cancelling a try stops the vibration pulses still to come", async ({ page }) => {
+  await page.addInitScript(() => {
+    window.__vibrations = [];
+    window.Capacitor = {
+      isNativePlatform: () => true, getPlatform: () => "android",
+      Plugins: {
+        Haptics: { vibrate: async (a) => { window.__vibrations.push(a.duration); }, impact: async () => {} },
+        GSAndroid: { speak: async () => ({}), stopSpeaking: async () => {}, accessibilityStatus: async () => ({ screenReader: false }), setWindowBackground: async () => {}, textScale: async () => ({ scale: 1 }), speechStatus: async () => ({ ready: true, failed: false }), addListener: () => ({ remove: () => {} }) },
+        App: { getInfo: async () => ({ version: "1.0", build: "28" }), addListener: () => {}, getLaunchUrl: async () => ({}) },
+        StatusBar: { setStyle: async () => {} }
+      }
+    };
+  });
+  await openApp(page);
+  await page.clock.install();
+  const pulses = await page.evaluate(() => ANDROID_VIBRATION_PULSES.reference_ok.length);
+  expect(pulses).toBeGreaterThan(1);
+  await page.evaluate(() => { a11ySettings.vibrate = true; window.__vibrations = []; hapticCue("reference_ok"); });
+  await page.clock.runFor(20);
+  const first = await page.evaluate(() => window.__vibrations.length);
+  await page.evaluate(() => gsClearHaptics());              // the try is cancelled
+  await page.clock.runFor(2000);
+  expect(await page.evaluate(() => window.__vibrations.length)).toBe(first);
+  expect(first).toBeLessThan(pulses);
+  // Left alone, the whole pattern plays.
+  await page.evaluate(() => { window.__vibrations = []; hapticCue("reference_ok"); });
+  await page.clock.runFor(2000);
+  expect(await page.evaluate(() => window.__vibrations.length)).toBe(pulses);
+});

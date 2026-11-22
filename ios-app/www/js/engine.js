@@ -347,8 +347,13 @@
             // Android: impact() is a click too short to feel through a
             // pocket. Timed vibrations instead, same rhythms as the iPhone.
             const pulses = ANDROID_VIBRATION_PULSES[type] || [];
+            // Tracker 27.17: kept with the other vibration timers, so
+            // cancelling a try or leaving a screen stops the pulses still to
+            // come (a DeafBlind student felt feedback for a try that was
+            // gone).
             pulses.forEach(([atMs, lengthMs]) => {
-              setTimeout(() => HapticsPlugin.vibrate({ duration: lengthMs }), atMs);
+              const id = setTimeout(() => HapticsPlugin.vibrate({ duration: lengthMs }), atMs);
+              if (atMs > 0 && typeof gsHapticTimers !== "undefined") gsHapticTimers.push(id);
             });
             return;
           }
@@ -2964,7 +2969,18 @@
       const plugin = nativePlatform === "ios" ? GSNativePlugin : null;
       if (plugin && typeof plugin.announce === "function") {
         try {
-          Promise.resolve(plugin.announce({ text, timeoutSec: capMs / 1000 })).then(done, done);
+          // Tracker 27.20: "finished: false" means VoiceOver dropped or cut
+          // the words, and may still be talking. Wait out the time the
+          // words should take (at least 0.6 s, at most 2.5 s more) rather
+          // than start the tones over them.
+          const askedAt = performance.now();
+          Promise.resolve(plugin.announce({ text, timeoutSec: capMs / 1000 })).then((result) => {
+            if (result && result.finished === false) {
+              setTimeout(done, Math.min(2500, Math.max(600, estimateMs - (performance.now() - askedAt))));
+            } else {
+              done();
+            }
+          }, done);
           setTimeout(done, capMs + 500);   // never stuck, even if the shell is
           return;
         } catch (error) { /* fall through to the live region */ }
@@ -2982,7 +2998,13 @@
           // Not heard by the time the estimate is over: the phone does not
           // report it, so never wait longer than build 24 did.
           Promise.resolve(android.waitForSpeech({ startWithinMs: Math.min(2500, estimateMs), quietMs: 450, maxMs: Math.max(8000, estimateMs * 3) }))
-            .then((result) => { if (result && result.heard) done(); else rest(); }, rest);
+            .then((result) => {
+              // 27.20: heard, but it never went quiet: TalkBack is still
+              // talking. One more bounded wait, then the tones.
+              if (result && result.heard && result.ended === false) setTimeout(done, 1500);
+              else if (result && result.heard) done();
+              else rest();
+            }, rest);
           setTimeout(done, Math.max(8000, estimateMs * 3) + 500);   // never stuck
           return;
         } catch (error) { /* older shell: the estimate */ }
