@@ -324,7 +324,10 @@ function gsSignalPlayAgain() {
  * timed: that attempt is dropped unrecorded. */
 document.addEventListener("visibilitychange", () => {
   if (!document.hidden) return;
-  if (gsSignalState.phase === "waiting" || gsSignalState.phase === "timing") {
+  // Tracker 27.22: "ready" too. The app hidden while "Get ready" was being
+  // said used to go on to the wait and the sound with nobody listening.
+  if (gsSignalState.phase === "ready" || gsSignalState.phase === "waiting" || gsSignalState.phase === "timing") {
+    gsStopSpeech();
     gsSignalCancel();
     gsSignalStatus("The app was hidden, so nothing was recorded. Press Ready to try again.", "warn");
   }

@@ -116,7 +116,17 @@ self.addEventListener("fetch", (event) => {
       fromCache().then((cached) => { finish(cached); });
     }, NETWORK_WAIT_MS);
     network
-      .then((response) => { clearTimeout(timer); finish(response); })
+      .then((response) => {
+        clearTimeout(timer);
+        // Tracker 27.23: the server answered, but with an error page (500,
+        // 503, a host's "site not found"). The saved copy is better than
+        // that; the error is shown only when there is nothing saved.
+        if (response && !response.ok && response.status !== 304 && response.type !== "opaqueredirect") {
+          fromCache().then((cached) => { if (!finish(cached)) finish(response); });
+          return;
+        }
+        finish(response);
+      })
       .catch(() => {
         clearTimeout(timer);
         fromCache().then((cached) => { if (!finish(cached)) finish(Response.error()); });

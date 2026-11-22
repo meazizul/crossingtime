@@ -8,6 +8,76 @@ than commit history. They are accurate to the day.
 
 ---
 
+## 2026-11-22 (build 28, in preparation) — designed sounds and a natural voice
+
+From Cindi Lashinsky's bug tracker (feature request F14, her decisions of 18
+November, and the first items of the build 27 review, 27.x) and from testers
+who found the tones too plain and the spoken voice robotic. Not released yet.
+
+- **Designed sounds (F14).** The right sound, the wrong sound, the student's
+  own sound, the button chime and the "real crossing time" tick are now short
+  recordings from the public-domain UI SFX set (CC0; see
+  `ios-app/www/sounds/LICENSE.md`), in two styles: **Bright** (the default)
+  and **Warm**. The plain tones of builds 1 to 27 stay as **Classic**. The
+  choice is in Settings, under Sound calibration, as **Sound style**.
+  - Right and wrong differ from the first moment: the right sound is three
+    notes going up; wrong sound A opens more than a fifth lower.
+  - Every recording starts on its first sample, so a cue still lands on the
+    exact moment it is scheduled for. On iPhone the recordings are mixed by
+    the app's own player, frame by frame, like the tones; the silent switch
+    does not mute them.
+  - "What the sounds mean" describes the sounds that are chosen.
+  - **Sound pitch** (on the activity pages) now also moves these sounds a few
+    semitones lower or higher.
+- **A steadier, fuller warning-time sound (F14).** It was two plain tones a
+  minor third apart, which sounded like a telephone dial tone. It is now one
+  note with its own overtones, at the same five pitches, still perfectly
+  steady from start to end (no beat or pulse to count by). Classic keeps the
+  old sound.
+- **A natural voice.** The app's own fixed sentences ("Get ready", "Replay",
+  "Correct", the directions on each screen: about 640 in all) are now recordings of
+  one natural voice, made once with the open Kokoro text-to-speech model and
+  shipped with the app. Nothing is sent anywhere when the app speaks. A
+  message is played from recordings only when every sentence in it has one;
+  a sentence with a number of seconds or a student's code is still said by
+  the phone's voice. Accessibility, Speech has a new **Voice** choice:
+  **Natural voice** (the default) or **This phone's own voice**. The speaking
+  rate applies to the recordings too, without changing their pitch.
+  - On iPhone, the phone's voice is now the best US English voice installed
+    (a Premium or Enhanced voice if the person has downloaded one).
+  - On an Android phone whose text-to-speech is missing or not ready, the
+    recorded sentences are still spoken (part of 27.15).
+- **Capacitor 7.6.9 (27.1).** The iPhone shell, core and command-line tool
+  move from 7.6.8 to 7.6.9, the version that fixes the security advisory.
+  Android was already on 7.6.9.
+- **Fixes from the build 27 review.**
+  - 27.10: the first extra student cannot be given the code of the student
+    already on the phone.
+  - 27.22: Comparison preparation is cancelled when the app is hidden during
+    "Get ready", as it already was during the wait and the sound.
+  - 27.23: an installed web app shows its saved copy, not the server's error
+    page, when the server answers with an error.
+  - 27.24: the Copy buttons in Instructor setup say when nothing was copied.
+  - 27.30: "Test haptic pulse" pressed twice no longer leaves vibration on.
+  - 27.40: on the How much pad, a second tap within a quarter of a second of
+    the first is ignored.
+- **Size.** The recordings add about 9 MB to each app. The website fetches
+  the voice in the background after the page has settled (not when the phone
+  asks to save data), so it is there offline.
+- **Checked.** 342 automated tests (21 new). iPhone 17 Pro Max simulator:
+  all 14 sounds and the recorded sentences load, cues and voice play through the
+  app's own player, and the loudest mix stays under full scale. Android 16
+  emulator: sounds and the recorded voice play in the app. **Not yet heard
+  on a real phone's speaker**, which is where the choice of sounds has to be
+  made.
+
+To rebuild the recordings after a change of wording:
+`node tools/voice-phrases.mjs > phrases.json`, then
+`python tools/voice-build.py phrases.json www/voice MODEL_DIR FFMPEG` (only
+new sentences are recorded).
+
+---
+
 ## 2026-11-18 (build 27) — results in words where you want them, and the app follows the phone's text size
 
 From Cindi Lashinsky's bug tracker (feature request F12, her decision by email

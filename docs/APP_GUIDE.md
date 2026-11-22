@@ -76,7 +76,7 @@ when you think you would finish crossing.
   recorded.
 
 The replay uses the Practice vocabulary: the sound for as long as you let it
-run, your own sound where you pressed, and the chime or the low pulse where
+run, your own sound where you pressed, and the right or the wrong sound where
 your real crossing time ends.
 
 ### 3. Comparison practice
@@ -117,12 +117,12 @@ replays, chosen by the instructor:
   time, the same as when the sample played; your own sound where your crossing
   time ends, and again at your crossing time plus your estimate (for longer) or
   minus it (for shorter), which is where you thought the warning time ended;
-  and the chime or the low pulse where the warning time really ended (chime if
+  and the right or the wrong sound where the warning time really ended (right if
   your estimate was within the margin). Example: crossing 6 s, sample 8.5 s,
-  estimate 3.5 s: sound from 0 to 8.5 s, your sound at 6 s and at 9.5 s, low
-  pulse at 8.5 s.
+  estimate 3.5 s: sound from 0 to 8.5 s, your sound at 6 s and at 9.5 s, the
+  wrong sound at 8.5 s.
 - **(b) Like Practice my timing**: the comparison replay, then your sound at
-  the start and where your estimate ended, and the chime or the low pulse
+  the start and where your estimate ended, and the right or the wrong sound
   where the true difference ends.
 
 Under **Options**: the sound style, **Sound loudness** (default 100%) and
@@ -428,15 +428,21 @@ stays locked.
 
 After a short lead-in, the app plays back:
 
-- **Your taps** — your own sound (a short, bright tone) at the moment you
-  tapped, the same sound you heard when you tapped.
+- **Your taps** — your own sound (a short tap) at the moment you tapped, the
+  same sound you heard when you tapped.
 - **The reference** — at each correct time, either:
-  - a **short, bright, high chime** → you were within the margin, or
-  - a **longer, low, buzzing pulse** → you were outside it.
+  - **three notes going up** → you were within the margin, or
+  - **a short, low sound** → you were outside it.
 
-The two are deliberately different along three independent dimensions — pitch
-register, duration (0.12s vs 0.30s), and texture (pure vs beating/rough) — so
-they can never be confused, even through a phone speaker next to traffic.
+Since build 28 these are designed recordings rather than plain tones, in two
+styles, **Bright** (the default) and **Warm**; **Classic** brings back the
+tones of earlier versions (a short, bright chime and a longer, low, buzzing
+pulse). Choose under Settings, Sound calibration, **Sound style**; each
+sound has a Play button there, and each style offers a second right sound
+and a second wrong sound (B). In every style the right and the wrong sound
+differ from their first moment, so they are not confused even through a
+phone speaker next to traffic. **Sound pitch**, on the activity pages, makes
+all the sounds lower or higher.
 
 **What you are listening for is the distance between your tone and the
 reference tone.** If they land together, you were on time. The further apart
@@ -522,8 +528,19 @@ than in a browser, and the note under the button always states which is active.
 **Speak directions aloud** (self-voicing) makes the app read its own
 directions and results, for students still learning VoiceOver or TalkBack. A
 **Speaking rate** sets slower, normal or faster. Speech always stops while a
-sound is being timed. On iPhone and Android the app speaks through the
-system's own voice (the Android app only since build 15; before that the
+sound is being timed.
+
+**Voice** (build 28): **Natural voice** (the default) plays the app's own
+sentences ("Get ready", "Replay", "Correct", the directions on each screen)
+from recordings of one natural voice that come with the app. A sentence with
+a number or a student's code in it cannot be recorded ahead of time, so the
+phone's voice says those. **This phone's own voice** uses the phone's voice
+for everything, as before build 28. On iPhone the phone's voice sounds much
+better with a Premium or Enhanced voice downloaded (iOS Settings,
+Accessibility, Spoken Content, Voices); the app uses it when it is there.
+
+For what the recordings do not cover, on iPhone and Android the app speaks
+through the system's own voice (the Android app only since build 15; before that the
 Android web view had no speech engine and said nothing). When VoiceOver or
 TalkBack is running, the app does not speak for itself, so the two never talk
 over each other (build 23); the screen reader says everything instead. The

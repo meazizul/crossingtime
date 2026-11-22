@@ -4082,12 +4082,17 @@
       }
     });
 
+    let hapticsTestRunning = false;
     hapticsTestBtn.addEventListener("click", () => {
       if (!hapticsAvailable()) {
         setStatus("No haptics available on this platform.", "warn");
         announceScreenReader("No haptics available on this platform.");
         return;
       }
+      // Tracker 27.30: a second press during the test used to read the
+      // setting while the test had it switched on, and then leave it on.
+      if (hapticsTestRunning) return;
+      hapticsTestRunning = true;
       const wasEnabled = a11ySettings.vibrate;
       a11ySettings.vibrate = true;
       hapticCue("marker");
@@ -4095,6 +4100,7 @@
       setTimeout(() => {
         hapticCue("reference_bad");
         a11ySettings.vibrate = wasEnabled;
+        hapticsTestRunning = false;
       }, 900);
       setStatus("Playing three test pulses: marker, acceptable, outside.");
       announceScreenReader("Playing three test pulses: marker, acceptable, outside.");
@@ -4346,17 +4352,20 @@
     shareTimingSettingsBtn.addEventListener("click", () => { copyShareTimingLink(); });
     textSetupBtn?.addEventListener("click", () => { textSetupToStudent(); });
 
+    const GS_COPY_FAILED = "Could not copy. Select the text in the box and copy it by hand.";
+
     copySetupTimingMessageBtn.addEventListener("click", async () => {
       if (!validateShareSetup()) return;
       populateShareMessagePreviews();
-      await copyTextToClipboard(setupTimingMessage.value);
-      setShareNote("Copied the setup message.");
+      // Tracker 27.24: say what really happened.
+      const copied = await copyTextToClipboard(setupTimingMessage.value);
+      setShareNote(copied ? "Copied the setup message." : GS_COPY_FAILED);
     });
 
     copyPracticeTimingMessageBtn.addEventListener("click", async () => {
       populateShareMessagePreviews();
-      await copyTextToClipboard(practiceTimingMessage.value);
-      setShareNote("Copied the practice link.");
+      const copied = await copyTextToClipboard(practiceTimingMessage.value);
+      setShareNote(copied ? "Copied the practice link." : GS_COPY_FAILED);
     });
 
     // Keep the previews current while the instructor changes what to include.

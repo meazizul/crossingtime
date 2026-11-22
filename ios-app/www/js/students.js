@@ -211,6 +211,13 @@ function gsStudentsAdd(rawCode, started) {
   }
   const day = /^\d{4}-\d{2}-\d{2}$/.test(started || "") ? started : gsTodayLocal();
   if (!registry) {
+    // Tracker 27.10: with no list yet, the student already on this phone is
+    // not in it, so the check above could not see their code. Two students
+    // with one code would have their reports mixed up.
+    const current = gsStudentCodeClean(localStorage.getItem("om-client-code") || "");
+    if (current && current === code) {
+      return { ok: false, message: `There is already a student ${code} on this phone. Choose a different code.` };
+    }
     // The first time: the practice already on this phone becomes the first
     // student, under the code it already has (it may have none).
     registry = {

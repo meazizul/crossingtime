@@ -999,6 +999,8 @@ function gsHowMuchPadBack() {
 
 /* atMs: the touch-down time the swipe area or the button passes in (the
  * moment that counts is the touch, tracker 20.9); now when there is none. */
+const GS_HOW_MUCH_MIN_MS = 250;
+
 function gsHowMuchTap(atMs) {
   if (!gsHowMuchPad.onDone) return;
   const at = Number.isFinite(atMs) && atMs <= performance.now() ? atMs : performance.now();
@@ -1013,6 +1015,9 @@ function gsHowMuchTap(atMs) {
     }
     return;
   }
+  // Tracker 27.40: a second tap a moment after the first is a double tap
+  // or a bounce of the finger, not an estimate of nearly no time at all.
+  if (at - gsHowMuchPad.start < GS_HOW_MUCH_MIN_MS) return;
   const produced = Math.max(0, at - gsHowMuchPad.start) / 1000;
   playStudentTone();
   const done = gsHowMuchPad.onDone;
