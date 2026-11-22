@@ -48,8 +48,8 @@ who found the tones too plain and the spoken voice robotic. Not released yet.
   - On an Android phone whose text-to-speech is missing or not ready, the
     recorded sentences are still spoken (part of 27.15).
 - **Fixes from the build 27 review (tracker 27.x).** Of the 40 items for the
-  developer, 36 are done, 2 are done in part (27.18, 27.27) and 2 are not
-  done (27.38, 27.41). Each has a test unless it says otherwise.
+  developer, 38 are done and 2 are done in part (27.18, 27.27). Each has a
+  test unless it says otherwise.
   - *Security:* 27.1 Capacitor iOS, core and CLI 7.6.8 to 7.6.9 (Android was
     already there). 27.31 Android file sharing limited to `cache/reports`.
   - *One student's data on another, and lost data:* 27.2 a setup link for a
@@ -107,14 +107,36 @@ who found the tones too plain and the spoken voice robotic. Not released yet.
     busy. 27.33 the tests are no longer tied to one Mac (not yet run on
     Linux). 27.43 after a setup link the student stays on Home; after a
     switch the note is also in the banner.
-  - *Not done:* 27.38 (each student's history in its own file) and 27.41
-    (one clock for sound and timers on Android and the web) change how data
-    is stored and how every try is timed, and need testing on real phones
-    with real data before they ship.
+  - *Storage (27.38):* a phone with several students kept every waiting
+    student's whole practice history inside one settings value, held in the
+    web view's storage and copied into the phone's Preferences. Each waiting
+    student's history is now its own record: a file in the app's data folder
+    on iPhone and Android (`gapsense/students/<id>.json`), an entry in the
+    browser's database on the web. The settings value keeps a small index.
+    A history leaves the settings value only after its record was written
+    and read back, and comes back before that student is opened; if the
+    record cannot be read, the switch (or removal, or setup link) is
+    refused and nothing changes. Histories stored the old way move at the
+    first start. With one student on the phone nothing changes. Measured on
+    the iPhone simulator and the Android emulator with two students of
+    4,500 tries each: the settings value went from about 660,000 characters
+    to under 300.
+  - *One clock for a try (27.41, Android and the web):* the sound runs on the
+    audio clock and everything else on timers; when the audio clock was
+    stopped at the start of a try (browsers stop it after idle minutes), the
+    sound started late while the vibration, the answer pad and the stop time
+    ran on time. Now any touch or key starts the clock again; a sample's
+    start (Comparison practice and Comparison preparation) waits, 1.5
+    seconds at most, until the clock is confirmed running, so the sound, its
+    vibration, the pad and the measured time start from one moment; and a
+    sound asked for on a stopped clock is placed where it was meant to be in
+    real time. With the clock running, as it almost always is, nothing
+    changes. The iPhone app plays sound through its own player and was not
+    affected.
 - **Size.** The recordings add about 9 MB to each app. The website fetches
   the voice in the background after the page has settled (not when the phone
   asks to save data), so it is there offline.
-- **Checked.** 379 automated tests (58 new). iPhone 17 Pro Max simulator:
+- **Checked.** 397 automated tests (76 new). iPhone 17 Pro Max simulator:
   all 14 sounds and the recorded sentences load, cues and voice play through the
   app's own player, and the loudest mix stays under full scale. Android 16
   emulator: sounds and the recorded voice play in the app; a font-size change

@@ -207,8 +207,19 @@ function gsSignalPress(atMs) {
   }
 }
 
-function gsSignalFire() {
+function gsSignalFire(clockChecked = false) {
   if (gsSignalState.phase !== "waiting") return;
+  // Tracker 27.41: the student's time is measured from signalAt. If the
+  // audio clock is stopped, the sound would start late while signalAt, the
+  // vibration and the give-up timer ran on time, and the student would be
+  // marked late by that much. So the start waits (1.5 s at most) until the
+  // clock is confirmed running; a press meanwhile is a false start, as
+  // before, and a cancel is honoured by the check above.
+  if (!clockChecked && typeof gsAudioRunning === "function" && !gsAudioRunning()) {
+    const session = gsSignalState.session;
+    gsWhenAudioRunning(() => { if (session === gsSignalState.session) gsSignalFire(true); });
+    return;
+  }
   gsSignalState.phase = "timing";
   gsSignalState.signalAt = performance.now();
   gsSignalUpdateButton();

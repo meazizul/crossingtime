@@ -1304,10 +1304,19 @@ function gsCompareBegin() {
   const startSample = () => {
     const delaySec = randomPause ? 1.2 + Math.random() * 3 : 0.35;
     gsLater(gsCompareTimers, () => {
-      gsCompareState.phase = "playing";
-      gsBeginQuiet();
-      gsPlaySample(trial.interval, 0.05, gsCompareStyle());
-      gsLater(gsCompareTimers, gsCompareAskAnswer, 0.05 + trial.interval + 0.4);
+      // Tracker 27.41: the sample, its vibration at each end and the timer
+      // that opens the answer pad start from one moment, and that moment
+      // waits (1.5 s at most) for the audio clock to be running. Only if
+      // this same try is still waiting when it is.
+      const begin = () => {
+        if (gsCompareState.phase !== "waiting" || gsCompareState.intervalSec !== trial.interval) return;
+        gsCompareState.phase = "playing";
+        gsBeginQuiet();
+        gsPlaySample(trial.interval, 0.05, gsCompareStyle());
+        gsLater(gsCompareTimers, gsCompareAskAnswer, 0.05 + trial.interval + 0.4);
+      };
+      if (typeof gsWhenAudioRunning === "function") gsWhenAudioRunning(begin);
+      else begin();
     }, delaySec);
   };
   // With VoiceOver or TalkBack the sample waits until the screen reader has

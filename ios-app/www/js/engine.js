@@ -753,7 +753,7 @@
     }
 
     /* Play one recording. Returns false when the tone should play instead. */
-    function gsPlayCue(role, startTime = 0, volumeScale = 1) {
+    function gsPlayCue(role, startTime = 0, volumeScale = 1, skipSec = 0) {
       const style = gsSoundStyle();
       if (style === "classic" || !role) return false;
       if (a11ySettings.outputMode === "visual-only") return true;
@@ -772,10 +772,15 @@
       }
       const context = ensureAudioContext();
       if (context.state !== "running" && !gsPlayCue.retrying) {
+        // Tracker 27.41: placed in real time, as the tones are; a recording
+        // whose start has passed is joined part-way through.
+        const askedAt = performance.now();
         context.resume().then(() => {
+          const placed = gsPlaceLateSound(startTime, buffer.duration / rate, (performance.now() - askedAt) / 1000, true);
+          if (!placed) return;
           gsPlayCue.retrying = true;
           try {
-            gsPlayCue(role, startTime, volumeScale);
+            gsPlayCue(role, placed.startTime, volumeScale, placed.skipped);
           } finally {
             gsPlayCue.retrying = false;
           }
@@ -790,8 +795,9 @@
       gain.gain.setValueAtTime(level, now);
       // Past the soft clipper: see gsBuildOutputStage.
       source.connect(gain).connect(cueOutput || masterLimiter);
-      source.start(now);
-      const length = buffer.duration / rate;
+      const skip = Math.max(0, Math.min(Number(skipSec) || 0, buffer.duration / rate - 0.02));
+      source.start(now, skip * rate);
+      const length = buffer.duration / rate - skip;
       rememberScheduledSound({ gain, oscillators: [source], endAt: now + length + 0.02 });
       gsDuckSteadyAround(now, length);
       gsCuesPlayed += 1;
@@ -1059,6 +1065,78 @@
       scheduledSounds.length = 0;
     }
 
+    /*
+     * Build 28 (tracker 27.41): one clock for a try.
+     *
+     * On Android and the web the sound runs on the audio clock and
+     * everything else (vibration, the screen, when the answer pad opens, the
+     * stop time in Comparison preparation) on ordinary timers. If the audio
+     * clock is stopped when a try starts (the browser stops it after a few
+     * idle minutes), the sound used to start late by however long the clock
+     * took to start, while the rest ran on time. Three things now keep them
+     * together:
+     *   1. every touch or key starts the clock again, so it is nearly always
+     *      running before a try can begin;
+     *   2. a sample's start waits until the clock is confirmed running
+     *      (gsWhenAudioRunning), so the sound, its vibration and the pad
+     *      start from the same moment, and the student's stop time is
+     *      measured from when the sound really began;
+     *   3. a sound asked for while the clock is stopped is placed where it
+     *      was meant to be in real time (gsPlaceLateSound).
+     * The iPhone app plays sound through its own player and is not affected.
+     */
+    function gsAudioRunning() {
+      if (nativeSound) return true;
+      try { return ensureAudioContext().state === "running"; } catch (error) { return true; }
+    }
+
+    /* Run fn once the audio clock is running. At once, in the same step,
+     * when it already is (the usual case). If it will not start within
+     * maxMs, fn runs anyway: the try is not held for ever. */
+    function gsWhenAudioRunning(fn, maxMs = 1500) {
+      if (gsAudioRunning()) { fn(); return; }
+      const context = audioContext;
+      let done = false;
+      let poll = null;
+      let limit = null;
+      const go = () => {
+        if (done) return;
+        done = true;
+        clearInterval(poll);
+        clearTimeout(limit);
+        fn();
+      };
+      poll = setInterval(() => { if (context.state === "running") go(); }, 20);
+      limit = setTimeout(go, maxMs);
+      try {
+        const pending = context.resume();
+        if (pending && typeof pending.then === "function") pending.then(() => { if (context.state === "running") go(); }, () => {});
+      } catch (error) { /* the limit ends the wait */ }
+    }
+
+    /* Where a sound goes when it could only be scheduled lateSec after it
+     * was asked for. null: its whole time has passed. */
+    function gsPlaceLateSound(startTime, duration, lateSec, keepsEnd) {
+      const late = Math.max(0, Number(lateSec) || 0);
+      const start = startTime - late;
+      if (start >= 0) return { startTime: start, duration, skipped: 0 };
+      if (!keepsEnd) return { startTime: 0, duration, skipped: -start };     // a short cue: now
+      const left = duration + start;
+      return left > 0.03 ? { startTime: 0, duration: left, skipped: -start } : null;
+    }
+
+    // 1. Any touch or key starts the audio clock again if it has stopped.
+    ["pointerdown", "keydown"].forEach((type) => {
+      document.addEventListener(type, () => {
+        try {
+          if (!nativeSound && audioContext && audioContext.state !== "running" && audioContext.state !== "closed") {
+            const pending = audioContext.resume();
+            if (pending && typeof pending.catch === "function") pending.catch(() => {});
+          }
+        } catch (error) { /* the next sound tries again */ }
+      }, { capture: true, passive: true });
+    });
+
     function playCompositeTone(partials, duration = 0.16, startTime = 0, volumeScale = 1, envelope = "pulse") {
       if (a11ySettings.outputMode === "visual-only") return;
       if (nativeSound) {
@@ -1076,10 +1154,18 @@
         // Suspended or interrupted: wait for the clock to run, then schedule
         // once. A second failure plays on whatever clock there is rather than
         // looping.
+        // Tracker 27.41: the timers, the vibration and the screen did not
+        // wait while the clock was started, so the sound is placed where it
+        // was meant to be in real time, not the same delay after a late
+        // start. If its start has already passed, a steady sound plays what
+        // is left of its length, so it still ends on time.
+        const askedAt = performance.now();
         context.resume().then(() => {
+          const placed = gsPlaceLateSound(startTime, duration, (performance.now() - askedAt) / 1000, envelope === "steady");
+          if (!placed) return;
           playCompositeTone.retrying = true;
           try {
-            playCompositeTone(partials, duration, startTime, volumeScale, envelope);
+            playCompositeTone(partials, placed.duration, placed.startTime, volumeScale, envelope);
           } finally {
             playCompositeTone.retrying = false;
           }
@@ -1152,6 +1238,13 @@
         return stopNative;
       }
       const context = ensureAudioContext();
+      // Tracker 27.41: this used not to look at the clock at all. Callers
+      // that time something from the sound wait for the clock first
+      // (gsWhenAudioRunning); if it is still stopped here, it is asked to
+      // run, and the sound begins the moment it does.
+      if (context.state !== "running" && context.state !== "closed") {
+        try { const pending = context.resume(); if (pending && typeof pending.catch === "function") pending.catch(() => {}); } catch (error) { /* as before */ }
+      }
       const now = context.currentTime;
       const gain = context.createGain();
       const level = TEST_TUNING.masterVolume * volumeScale;
