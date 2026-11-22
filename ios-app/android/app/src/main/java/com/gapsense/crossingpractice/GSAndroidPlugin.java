@@ -160,9 +160,29 @@ public class GSAndroidPlugin extends Plugin {
         }
     }
 
+    /* Build 28 (tracker 27.13): is an accessibility service whose name
+     * contains this text switched on? Used for Switch Access and Voice
+     * Access, whose users cannot draw a swipe on a pad. */
+    private boolean serviceOn(String part) {
+        try {
+            AccessibilityManager manager = accessibilityManager != null
+                ? accessibilityManager
+                : (AccessibilityManager) getContext().getSystemService(Context.ACCESSIBILITY_SERVICE);
+            if (manager == null || !manager.isEnabled()) return false;
+            for (android.accessibilityservice.AccessibilityServiceInfo info
+                    : manager.getEnabledAccessibilityServiceList(android.accessibilityservice.AccessibilityServiceInfo.FEEDBACK_ALL_MASK)) {
+                String id = info.getId();
+                if (id != null && id.toLowerCase(Locale.US).contains(part)) return true;
+            }
+        } catch (RuntimeException ignored) { }
+        return false;
+    }
+
     private void notifyScreenReader() {
         com.getcapacitor.JSObject data = new com.getcapacitor.JSObject();
         data.put("screenReader", screenReaderOn());
+        data.put("switchAccess", serviceOn("switchaccess"));
+        data.put("voiceAccess", serviceOn("voiceaccess"));
         notifyListeners("screenReader", data);
     }
 
@@ -380,6 +400,8 @@ public class GSAndroidPlugin extends Plugin {
     public void accessibilityStatus(PluginCall call) {
         com.getcapacitor.JSObject result = new com.getcapacitor.JSObject();
         result.put("screenReader", screenReaderOn());
+        result.put("switchAccess", serviceOn("switchaccess"));
+        result.put("voiceAccess", serviceOn("voiceaccess"));
         call.resolve(result);
     }
 

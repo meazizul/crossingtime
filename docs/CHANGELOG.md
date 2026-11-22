@@ -47,27 +47,78 @@ who found the tones too plain and the spoken voice robotic. Not released yet.
     (a Premium or Enhanced voice if the person has downloaded one).
   - On an Android phone whose text-to-speech is missing or not ready, the
     recorded sentences are still spoken (part of 27.15).
-- **Capacitor 7.6.9 (27.1).** The iPhone shell, core and command-line tool
-  move from 7.6.8 to 7.6.9, the version that fixes the security advisory.
-  Android was already on 7.6.9.
-- **Fixes from the build 27 review.**
-  - 27.10: the first extra student cannot be given the code of the student
-    already on the phone.
-  - 27.22: Comparison preparation is cancelled when the app is hidden during
-    "Get ready", as it already was during the wait and the sound.
-  - 27.23: an installed web app shows its saved copy, not the server's error
-    page, when the server answers with an error.
-  - 27.24: the Copy buttons in Instructor setup say when nothing was copied.
-  - 27.30: "Test haptic pulse" pressed twice no longer leaves vibration on.
-  - 27.40: on the How much pad, a second tap within a quarter of a second of
-    the first is ignored.
+- **Fixes from the build 27 review (tracker 27.x).** Of the 40 items for the
+  developer, 36 are done, 2 are done in part (27.18, 27.27) and 2 are not
+  done (27.38, 27.41). Each has a test unless it says otherwise.
+  - *Security:* 27.1 Capacitor iOS, core and CLI 7.6.8 to 7.6.9 (Android was
+    already there). 27.31 Android file sharing limited to `cache/reports`.
+  - *One student's data on another, and lost data:* 27.2 a setup link for a
+    student the phone cannot switch to or add is refused and changes
+    nothing. 27.3 "deleted" is said only once the backup copy is rewritten;
+    otherwise the deletion stays marked and the history is never restored.
+    27.5 a browser tab left on another student does not save a try to the
+    newly selected one, and starts again. 27.6 the demo link waits for the
+    restore check, so example times never replace real ones. 27.10 the first
+    extra student cannot take the code of the student already on the phone.
+    27.37 an exported report or CSV is deleted when the share sheet closes,
+    and Delete history and Remove student clear any that are left.
+  - *Session code:* 27.7 "Unlocked" only when the unlock was saved. 27.8
+    with no crossing times yet, focus goes to a control that works and the
+    message says what is needed. 27.9 a page that cannot check codes (http
+    over Wi-Fi) says so instead of "did not match".
+  - *Students who cannot swipe (27.13):* the pads show their buttons when
+    the phone reports Switch Control (iPhone), or Switch Access, Voice
+    Access or TalkBack (Android); the iPhone touch area offers each answer
+    as a named action. Voice Control on iPhone cannot be detected: choose
+    Buttons only for that student.
+  - *Pads and gestures:* 27.4 a long still press on the iPhone touch area
+    opens "Read it larger" at large text and is not an answer. 27.19 the
+    iPhone answer area's label starts with the question. 27.21 the pad
+    behind "Read it larger" is inert while it is open. 27.26 a second finger
+    or the palm no longer restarts a gesture. 27.39 a swipe up on the street
+    pad no longer counts as the vehicle passing. 27.40 the How much pad
+    ignores a second tap within a quarter of a second. 27.42 a pad untouched
+    for ten minutes stops holding the screen on, and says so.
+  - *Speech and screen readers:* 27.20 replay tones wait a bounded time when
+    the screen reader reports its words did not finish. 27.35 setting
+    confirmations go to the screen reader when one is running. 27.36
+    announcements made while a pop-up is open go to a live region inside
+    it. 27.27 (first step only) a browser setting, "I use a screen reader in
+    this browser", so the student hears one voice; the default and a
+    first-run question are still to decide.
+  - *Vibration:* 27.14 a device that cannot vibrate says so, and the test
+    button does not claim pulses. 27.17 Android pulses stop when a try is
+    cancelled. 27.30 "Test haptic pulse" pressed twice no longer leaves
+    vibration on.
+  - *Android:* 27.15 speech reports when nothing was said (the words then go
+    to the live region and Accessibility says why), waits for an engine that
+    is still starting, uses the phone's own English, and declares the speech
+    service. 27.16 the screen is kept awake by the app itself. 27.18 (part)
+    a change of sound output during a timed sound cancels the try; calls and
+    alarms, and the Bluetooth delay, are not done. 27.25 Font size, Display
+    size and Bold text no longer restart the app, and the size is known
+    before the first screen.
+  - *Other:* 27.11 the replay bar is no longer hidden as it starts. 27.22
+    Comparison preparation is cancelled when the app is hidden during "Get
+    ready". 27.23 an installed web app shows its saved copy when the server
+    answers with an error page (no automated test). 27.24 the Copy buttons
+    say when nothing was copied. 27.28 a browser that blocks storage no
+    longer stops the app from starting. 27.29 the Siri rows cannot be left
+    busy. 27.33 the tests are no longer tied to one Mac (not yet run on
+    Linux). 27.43 after a setup link the student stays on Home; after a
+    switch the note is also in the banner.
+  - *Not done:* 27.38 (each student's history in its own file) and 27.41
+    (one clock for sound and timers on Android and the web) change how data
+    is stored and how every try is timed, and need testing on real phones
+    with real data before they ship.
 - **Size.** The recordings add about 9 MB to each app. The website fetches
   the voice in the background after the page has settled (not when the phone
   asks to save data), so it is there offline.
-- **Checked.** 342 automated tests (21 new). iPhone 17 Pro Max simulator:
+- **Checked.** 379 automated tests (58 new). iPhone 17 Pro Max simulator:
   all 14 sounds and the recorded sentences load, cues and voice play through the
   app's own player, and the loudest mix stays under full scale. Android 16
-  emulator: sounds and the recorded voice play in the app. **Not yet heard
+  emulator: sounds and the recorded voice play in the app; a font-size change
+  no longer restarts it; a report is shared from the narrower folder. **Not yet heard
   on a real phone's speaker**, which is where the choice of sounds has to be
   made.
 

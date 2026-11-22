@@ -1090,6 +1090,7 @@ const GS_SIRI_ACTIVITIES = [
   ["live", "At the street"]
 ];
 let gsSiriBusy = false;
+const GS_SIRI_TIMEOUT_MS = 3 * 60 * 1000;
 
 function gsSiriRowText(title, phrase) {
   return phrase ? `${title}. Siri phrase: "${phrase}"` : `${title}. No Siri phrase yet`;
@@ -1151,8 +1152,14 @@ async function gsSiriChoose(screen, title) {
   gsSiriBusy = true;
   if (note) note.textContent = "";
   let result = null;
-  try { result = await plugin.siriShortcut({ screen }); } catch (error) { result = { result: "failed" }; }
+  // Tracker 27.29: never busy for ever. If the phone has not answered in
+  // three minutes (a sheet closed in a way it did not report), the rows work
+  // again; a late answer for that old request is then ignored.
+  let timedOut = false;
+  const timeout = new Promise((resolve) => setTimeout(() => { timedOut = true; resolve({ result: "cancelled" }); }, GS_SIRI_TIMEOUT_MS));
+  try { result = await Promise.race([plugin.siriShortcut({ screen }), timeout]); } catch (error) { result = { result: "failed" }; }
   gsSiriBusy = false;
+  if (timedOut) return;
   const phrase = result?.phrase || "";
   const messages = {
     added: `${title} added to Siri. Say "${phrase || title}" to open it.`,

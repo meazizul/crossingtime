@@ -336,6 +336,11 @@ public class GSNativePlugin: CAPPlugin, CAPBridgedPlugin {
         let label = call.getString("label") ?? "Gesture area"
         let hint = call.getString("hint") ?? "Direct touch area. Swipe or tap here as you would without VoiceOver."
         let focus = call.getBool("focus") ?? false
+        let actions: [(String, String)] = (call.getArray("actions") ?? []).compactMap { item in
+            guard let entry = item as? [String: Any], let name = entry["name"] as? String, let kind = entry["kind"] as? String,
+                  !name.isEmpty, ["up", "down", "left", "right", "tap"].contains(kind) else { return nil }
+            return (name, kind)
+        }
         DispatchQueue.main.async { [weak self] in
             guard let self = self, let webView = self.bridge?.webView else { call.resolve(["shown": false]); return }
             if width < 1 || height < 1 {
@@ -355,6 +360,9 @@ public class GSNativePlugin: CAPPlugin, CAPBridgedPlugin {
             view.frame = CGRect(x: x, y: y, width: width, height: height)
             view.accessibilityLabel = label
             view.accessibilityHint = hint
+            // Build 28 (tracker 27.13): the pad's answers by name, for
+            // VoiceOver's actions and Switch Control's menu.
+            view.setActions(actions)
             view.isHidden = false
             webView.bringSubviewToFront(view)
             // Tell VoiceOver. With focus the cursor moves onto the area.
@@ -736,7 +744,7 @@ struct GapSenseShortcuts: AppShortcutsProvider {
 /// opens the app with that activity and the scene delegate hands it to
 /// GSShortcutRouter, the same path as the ready-made App Shortcuts phrases,
 /// which keep working.
-final class GSSiriShortcuts: NSObject, INUIAddVoiceShortcutViewControllerDelegate, INUIEditVoiceShortcutViewControllerDelegate {
+final class GSSiriShortcuts: NSObject, INUIAddVoiceShortcutViewControllerDelegate, INUIEditVoiceShortcutViewControllerDelegate, UIAdaptivePresentationControllerDelegate {
     static let shared = GSSiriShortcuts()
 
     /// screen (as the page names it), title, suggested phrase
@@ -813,6 +821,9 @@ final class GSSiriShortcuts: NSObject, INUIAddVoiceShortcutViewControllerDelegat
             call.resolve(["result": "busy"])
             return
         }
+        // Tracker 27.29: marked busy before the lookup, not after it, so two
+        // quick taps cannot both get past the check and open two sheets.
+        pendingCall = call
         phrases { [weak self] byScreen in
             guard let self = self else { return }
             let sheet: UIViewController
@@ -825,15 +836,25 @@ final class GSSiriShortcuts: NSObject, INUIAddVoiceShortcutViewControllerDelegat
                 add.delegate = self
                 sheet = add
             } else {
+                self.pendingCall = nil
                 call.resolve(["result": "failed"])
                 return
             }
             sheet.modalPresentationStyle = .formSheet
-            self.pendingCall = call
+            // Swiping the sheet down calls none of Apple's "did finish" or
+            // "did cancel" methods; without this the rows stayed busy until
+            // the app was restarted (27.29).
+            sheet.presentationController?.delegate = self
             var top = presenter
             while let shown = top.presentedViewController { top = shown }
             top.present(sheet, animated: true)
         }
+    }
+
+    func presentationControllerDidDismiss(_ presentationController: UIPresentationController) {
+        let call = pendingCall
+        pendingCall = nil
+        call?.resolve(["result": "cancelled"])
     }
 
     private func finish(_ controller: UIViewController, _ result: [String: Any]) {
@@ -962,6 +983,18 @@ enum GSSelfTest {
 /// times the vehicle from the touch-down, not the lift.
 final class GSDirectTouchView: UIView {
     var onGesture: ((String, Double, Double, Double) -> Void)?
+
+    /// Named actions that stand for the pad's gestures ("Longer" = swipe up).
+    /// Chosen from VoiceOver's actions or Switch Control's menu, each sends
+    /// the same event a real gesture would, with no time on the glass.
+    func setActions(_ specs: [(String, String)]) {
+        accessibilityCustomActions = specs.map { spec in
+            UIAccessibilityCustomAction(name: spec.0) { [weak self] _ in
+                self?.onGesture?(spec.1, 0, 0, 0)
+                return true
+            }
+        }
+    }
     private var startPoint: CGPoint?
     private var startTime: TimeInterval = 0
     private var trackedTouch: UITouch?

@@ -325,8 +325,17 @@ code. It is a guard against accidental changes, not security.
 The swipe areas in the iPhone app are **direct touch areas**. Turn on Direct
 Touch for CrossingTime once (VoiceOver rotor, Direct Touch), and swipes and taps
 there work exactly as they do with VoiceOver off: no double tap, no hunting for
-a button, and the vehicle is timed from the touch. The buttons remain for
-anyone who prefers them. On Android with TalkBack, use the buttons.
+a button, and the vehicle is timed from the touch. On the iPhone's touch area
+the answers are also offered by name (Longer, Shorter, About the same; Vehicle
+from the left or right; It passed in front of me, It never came) in
+VoiceOver's actions and in Switch Control's menu.
+
+The buttons take the place of the swipe areas when the instructor chooses
+**Buttons only**, and, since build 28, by themselves whenever the phone
+reports that the student cannot draw a swipe: Switch Control on iPhone;
+Switch Access, Voice Access or TalkBack on Android. The app cannot tell that
+Voice Control (iPhone) is in use, so for a student who uses it the instructor
+should choose Buttons only.
 
 ### Backing out of an answer screen
 

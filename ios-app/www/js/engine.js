@@ -3055,7 +3055,17 @@
     let gsScreenReaderRunning = false;
 
     function gsScreenReaderOn() {
-      return typeof window.__gsScreenReader === "boolean" ? window.__gsScreenReader : gsScreenReaderRunning;
+      if (typeof window.__gsScreenReader === "boolean") return window.__gsScreenReader;
+      // Build 28 (tracker 27.27, first step): a browser cannot tell the page
+      // that a screen reader is running, so the student can say so in
+      // Accessibility. The app then leaves the talking to the screen
+      // reader, as the iPhone and Android apps do by themselves.
+      if (!isNativeShell && gsWebScreenReader()) return true;
+      return gsScreenReaderRunning;
+    }
+
+    function gsWebScreenReader() {
+      try { return localStorage.getItem("om-a11y-web-screen-reader") === "true"; } catch (error) { return false; }
     }
 
     /* Self-voicing is "for use without VoiceOver or TalkBack" (Settings).
@@ -3082,12 +3092,33 @@
     function gsScreenReaderAnswered() {
       if (gsScreenReaderKnownResolve) { gsScreenReaderKnownResolve(gsScreenReaderOn()); gsScreenReaderKnownResolve = null; }
     }
+    /* Tracker 27.13: other assistive technology the shells can see. A
+     * student using any of these cannot draw a swipe, so the pads show
+     * their buttons. TalkBack on Android is included: its swipes belong to
+     * TalkBack, and on a pad it could only tap (the App Guide already said
+     * "On Android with TalkBack, use the buttons"). */
+    const gsAssistive = { switchControl: false, switchAccess: false, voiceAccess: false };
+
+    function gsNoteAssistive(status) {
+      if (!status) return;
+      ["switchControl", "switchAccess", "voiceAccess"].forEach((name) => {
+        if (typeof status[name] === "boolean") gsAssistive[name] = status[name];
+      });
+    }
+
+    function gsButtonsNeeded() {
+      if (typeof window.__gsButtonsNeeded === "boolean") return window.__gsButtonsNeeded;
+      if (gsAssistive.switchControl || gsAssistive.switchAccess || gsAssistive.voiceAccess) return true;
+      return nativePlatform === "android" && isNativeShell && gsScreenReaderOn();
+    }
+
     function gsRefreshScreenReader() {
       const plugin = gsScreenReaderPlugin();
       if (!plugin) { gsScreenReaderAnswered(); return Promise.resolve(gsScreenReaderOn()); }
       try {
         return Promise.resolve(plugin.accessibilityStatus()).then((status) => {
           if (status && typeof status.screenReader === "boolean") gsScreenReaderRunning = status.screenReader;
+          gsNoteAssistive(status);
           gsScreenReaderAnswered();
           return gsScreenReaderOn();
         }).catch(() => { gsScreenReaderAnswered(); return gsScreenReaderOn(); });
@@ -3102,6 +3133,7 @@
       try {
         plugin.addListener("screenReader", (event) => {
           if (typeof event?.screenReader === "boolean") gsScreenReaderRunning = event.screenReader;
+          gsNoteAssistive(event);
         });
       } catch (error) { /* older shell: checked again on return to the app */ }
     })();
@@ -4184,6 +4216,21 @@
         gsStopSpeech();
       }
     });
+
+    (function gsBindWebScreenReader() {
+      const box = document.getElementById("a11yWebScreenReader");
+      const row = document.getElementById("a11yWebScreenReaderRow");
+      if (!box || !row) return;
+      row.hidden = isNativeShell;          // the apps find out by themselves
+      box.checked = gsWebScreenReader();
+      box.addEventListener("change", () => {
+        localStorage.setItem("om-a11y-web-screen-reader", String(box.checked));
+        if (box.checked) gsStopSpeech();
+        announceScreenReader(box.checked
+          ? "The app will leave the talking to your screen reader."
+          : "The app will use its own voice for Replay and results.", { force: true, speak: false });
+      });
+    })();
 
     a11yVoice?.addEventListener("change", () => {
       gsSetVoice(a11yVoice.value);

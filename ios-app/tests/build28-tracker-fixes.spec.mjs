@@ -680,3 +680,117 @@ test("27.43: the note after a student switch is in the banner on Instructor setu
   await expect(page.locator("#screen-home")).toBeVisible();
   await expect(page.locator("#screen-instructor")).toBeHidden();
 });
+
+/* ---------------- sixth batch: 27.4, 27.13, 27.29 ---------------- */
+
+test("27.13: when the phone reports the student cannot swipe, the pads show their buttons, and swipes stay for everyone else", async ({ page }) => {
+  await openApp(page);
+  await setTimes(page);
+  const result = await page.evaluate(() => {
+    const out = {};
+    const check = () => {
+      gsOpenAnswerPad({ title: "Was it longer or shorter?", onAnswer: () => {} });
+      const overlay = document.getElementById("answerOverlay");
+      const state = { swipes: gsPadSwipesOn(), surfaceHidden: document.getElementById("answerSurface").hidden, gridHidden: overlay.querySelector(".answer-grid").hidden };
+      gsCloseAnswerPad();
+      return state;
+    };
+    out.usual = check();
+    gsNoteAssistive({ switchControl: true });
+    out.switchControl = check();
+    gsNoteAssistive({ switchControl: false, voiceAccess: true });
+    out.voiceAccess = check();
+    gsNoteAssistive({ voiceAccess: false, switchAccess: true });
+    out.switchAccess = check();
+    gsNoteAssistive({ switchAccess: false });
+    out.after = check();
+    return out;
+  });
+  const buttons = { swipes: false, surfaceHidden: true, gridHidden: false };
+  const swipes = { swipes: true, surfaceHidden: false, gridHidden: true };
+  expect(result).toEqual({ usual: swipes, switchControl: buttons, voiceAccess: buttons, switchAccess: buttons, after: swipes });
+});
+
+test("27.13: on Android, TalkBack gets the buttons; on iPhone, VoiceOver keeps the touch area, now with the answers as named actions", async ({ page }) => {
+  await page.addInitScript(androidShell(), shellArgs());
+  await openApp(page);
+  expect(await page.evaluate(() => { window.__gsScreenReader = true; return gsButtonsNeeded(); })).toBe(true);
+  expect(await page.evaluate(() => { window.__gsScreenReader = false; return gsButtonsNeeded(); })).toBe(false);
+});
+
+test("27.13: the label and the named actions sent to the iPhone touch area match the pad's gestures", async ({ page }) => {
+  await openApp(page);
+  await setTimes(page);
+  const result = await page.evaluate(() => {
+    gsOpenAnswerPad({ title: "Was it longer or shorter?", onAnswer: () => {} });
+    const answer = gsDirectTouchTarget();
+    const handlers = Object.keys(answer.handlers()).sort();
+    const out = { answer: answer.actions, handled: answer.actions.every(([, kind]) => handlers.includes(kind)) };
+    gsCloseAnswerPad();
+    return out;
+  });
+  expect(result.answer).toEqual([["Longer", "up"], ["Shorter", "down"], ["About the same", "tap"]]);
+  expect(result.handled).toBe(true);
+});
+
+test("27.4: a long still press reported by the iPhone touch area opens 'Read it larger' at large text and is not an answer; a short tap still answers", async ({ page }) => {
+  await openApp(page, { storage: { "om-a11y-text-size": "xxl" } });
+  await setTimes(page);
+  const result = await page.evaluate(() => {
+    const answers = [];
+    gsOpenAnswerPad({ title: "Was it longer or shorter?", onAnswer: (a) => answers.push(a) });
+    const out = { holdEnabled: gsPadHoldEnabled() };
+    gsDirectTouchEvent({ kind: "tap", durationMs: GS_HOLD_MS + 300 });
+    out.afterHold = { answers: answers.length, panel: !document.getElementById("padReadOverlay").hidden };
+    gsPadReadClose();
+    gsDirectTouchEvent({ kind: "tap", durationMs: 90 });
+    out.afterTap = answers.length;
+    return out;
+  });
+  expect(result.holdEnabled).toBe(true);
+  expect(result.afterHold).toEqual({ answers: 0, panel: true });
+  expect(result.afterTap).toBe(1);
+});
+
+test("27.29: the Siri rows are never left busy: a request the phone does not answer is given up after the time limit", async ({ page }) => {
+  await page.addInitScript(() => {
+    window.__siriCalls = 0;
+    window.Capacitor = {
+      isNativePlatform: () => true, getPlatform: () => "ios",
+      Plugins: {
+        GSNative: {
+          haptic: async () => {}, pendingScreen: async () => ({}), tone: async () => ({ id: 1 }), sustainStart: async () => ({ id: 1 }), sustainStop: async () => {}, stopSound: async () => {},
+          audioStatus: async () => ({ engineRunning: true, ignoresSilentSwitch: true, outputVolume: 1, outputLatency: 0, route: "Speaker", peak: 0, tonesStarted: 0, hapticsSupported: true }),
+          speak: async () => {}, stopSpeaking: async () => {}, accessibilityStatus: async () => ({ screenReader: false, switchControl: false }),
+          siriShortcuts: async () => ({ shortcuts: [] }),
+          siriShortcut: () => { window.__siriCalls += 1; return new Promise(() => {}); },     // never answers
+          addListener: () => ({ remove: () => {} })
+        },
+        App: { getInfo: async () => ({ version: "1.0", build: "28" }), addListener: () => {}, getLaunchUrl: async () => ({}) },
+        StatusBar: { setStyle: async () => {} }
+      }
+    };
+  });
+  await openApp(page);
+  await page.clock.install();
+  await page.evaluate(() => { gsSiriChoose("practice", "Practice my timing"); gsSiriChoose("practice", "Practice my timing"); });
+  expect(await page.evaluate(() => ({ calls: window.__siriCalls, busy: gsSiriBusy }))).toEqual({ calls: 1, busy: true });
+  await page.clock.runFor(3 * 60 * 1000 + 500);
+  expect(await page.evaluate(() => gsSiriBusy)).toBe(false);
+  await page.evaluate(() => { gsSiriChoose("practice", "Practice my timing"); });
+  expect(await page.evaluate(() => window.__siriCalls)).toBe(2);
+});
+
+test("27.27 (first step): in a browser, 'I use a screen reader' makes the app leave the talking to the screen reader; the apps do not show the choice", async ({ page }) => {
+  await openApp(page);
+  expect(await page.evaluate(() => gsScreenReaderOn())).toBe(false);
+  await page.evaluate(() => document.getElementById("a11yModal").showModal());
+  await expect(page.locator("#a11yWebScreenReaderRow")).toBeVisible();
+  await page.locator("#a11yWebScreenReader").check();
+  expect(await page.evaluate(() => ({ on: gsScreenReaderOn(), selfVoice: gsSelfVoiceOn(), stored: localStorage.getItem("om-a11y-web-screen-reader") })))
+    .toEqual({ on: true, selfVoice: false, stored: "true" });
+  await page.reload();
+  await page.waitForFunction(() => typeof gsBoot === "function");
+  expect(await page.evaluate(() => gsScreenReaderOn())).toBe(true);
+  await expect(page.locator("#a11yWebScreenReader")).toBeChecked();
+});

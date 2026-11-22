@@ -433,8 +433,22 @@ let gsOpenPads = 0;
 
 /* Pads answer by swipe unless the instructor set buttons only. */
 function gsPadSwipesOn() {
+  // Tracker 27.13: a student who cannot make a swipe (Switch Control on
+  // iPhone; Switch Access, Voice Access or TalkBack on Android) gets the
+  // answer buttons, whatever the instructor's choice. With swipes on, the
+  // buttons were hidden and such a student had no way to answer.
+  if (typeof gsButtonsNeeded === "function" && gsButtonsNeeded()) return false;
   return gsFeature("compareSwipe") !== "off";
 }
+
+/* The gestures of the pad that is open, by name, for the iPhone's own touch
+ * area: VoiceOver's actions rotor and Switch Control's menu list them, so
+ * each answer can be chosen without drawing a swipe (27.13). */
+const GS_PAD_ACTIONS = {
+  answer: [["Longer", "up"], ["Shorter", "down"], ["About the same", "tap"]],
+  streetDetect: [["Vehicle from the left", "left"], ["Vehicle from the right", "right"]],
+  streetArriving: [["It passed in front of me", "tap"], ["It never came", "down"]]
+};
 
 /* ============================================================
  * DIRECT TOUCH (iPhone app, build 12; cursor and clean-up, build 14)
@@ -493,7 +507,8 @@ function gsDirectTouchTarget() {
       handlers: () => (gsSwipeHandlers.get(answer) || (() => ({})))(),
       // Tracker 27.19: the question first, as on the web area. VoiceOver
       // reads this label when focus lands on the iPhone's own touch area.
-      label: gsAnswerPad.title ? `${gsAnswerPad.title} ${GS_PAD_LABELS.answer}` : GS_PAD_LABELS.answer
+      label: gsAnswerPad.title ? `${gsAnswerPad.title} ${GS_PAD_LABELS.answer}` : GS_PAD_LABELS.answer,
+      actions: GS_PAD_ACTIONS.answer
     };
   }
   const live = document.getElementById("liveOverlay");
@@ -503,7 +518,8 @@ function gsDirectTouchTarget() {
     return {
       area: surface,
       handlers: () => (gsSwipeHandlers.get(live) || (() => ({})))(),
-      label: gsLiveState.phase === "arriving" ? GS_PAD_LABELS.streetArriving : GS_PAD_LABELS.streetDetect
+      label: gsLiveState.phase === "arriving" ? GS_PAD_LABELS.streetArriving : GS_PAD_LABELS.streetDetect,
+      actions: gsLiveState.phase === "arriving" ? GS_PAD_ACTIONS.streetArriving : GS_PAD_ACTIONS.streetDetect
     };
   }
   return null;
@@ -556,7 +572,8 @@ function gsDirectTouchSync({ focus = false } = {}) {
     if (key === gsDirectTouchLast && !wantFocus) return;
     gsDirectTouchLast = key;
     GSNativePlugin.directTouchShow({
-      x: rect.left, y: rect.top, width, height, label: target.label, hint: gsPadHint(), focus: wantFocus
+      x: rect.left, y: rect.top, width, height, label: target.label, hint: gsPadHint(), focus: wantFocus,
+      actions: (target.actions || []).map(([name, kind]) => ({ name, kind }))
     }).catch?.(() => {});
   }, 60);
 }
@@ -573,6 +590,18 @@ function gsDirectTouchEvent(event) {
   const fn = handlers[event?.kind];
   if (typeof fn !== "function") return false;
   const durationMs = Number(event?.durationMs) || 0;
+  // Tracker 27.4: the iPhone's own touch area reports a still press as a
+  // "tap" with its length. Where "Press and hold to read it larger" is on
+  // offer (large text, a swipe pad), a press of that length opens the
+  // reading panel and is not an answer, exactly as on the web pad.
+  if (event?.kind === "tap" && durationMs >= GS_HOLD_MS && gsPadHoldEnabled()) {
+    const overlay = target.area?.closest?.(".gesture-overlay");
+    if (overlay && overlay.classList.contains("swipes") && overlay.querySelector(".gesture-surface:not([hidden])")) {
+      gsGestureLogAdd("native", "hold", durationMs);
+      gsPadReadOpen(overlay);
+      return true;
+    }
+  }
   fn(performance.now() - durationMs);
   return true;
 }

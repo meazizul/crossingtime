@@ -973,6 +973,13 @@
           </label>
           <p class="setup-note">The app reads its own directions and results out loud. Speech always stops while a sound is being timed.</p>
           <p class="platform-note" id="speechVoiceNote" hidden></p>
+          <div id="a11yWebScreenReaderRow">
+            <label>
+              <input type="checkbox" id="a11yWebScreenReader" />
+              I use a screen reader in this browser (VoiceOver, TalkBack, JAWS, NVDA)
+            </label>
+            <p class="setup-note">A website cannot tell that a screen reader is on. With this ticked, "Replay" and the results are given to your screen reader and the app's own voice stays quiet, so you hear one voice, not two.</p>
+          </div>
           <label for="a11yVerbosity">How much the app says (verbosity)</label>
           <select id="a11yVerbosity">
             <option value="high">High: everything, and what is on each screen</option>
@@ -1124,6 +1131,7 @@
         <div class="setup-group">
           <p class="field-help" id="removeStudentWhat">This deletes the student's crossing times, settings and practice history from this phone. It cannot be undone.</p>
           <p class="field-help">To keep their practice, export the report first.</p>
+          <p class="field-help">Report and CSV files the app made for sharing are deleted too. A report or file already sent to another app or person is not: this app cannot reach it.</p>
         </div>
         <button class="settings-action" type="button" id="exportRemoveStudentBtn">Export the report first (CSV file)</button>
         <p class="field-help" id="removeStudentNote" role="status"></p>
@@ -1143,6 +1151,7 @@
           <p class="field-help" id="deleteHistoryWhat">This deletes every try you have recorded. It cannot be undone.</p>
           <p class="field-help" id="deleteHistoryWhere">It is deleted from this phone now, and from your phone's backup at its next backup.</p>
           <p class="field-help">Your settings, crossing times and instructor setup stay.</p>
+          <p class="field-help">Report and CSV files the app made for sharing are deleted too. A report or file already sent to another app or person is not: this app cannot reach it.</p>
           <p class="field-help">To keep a copy of your practice, send or export a report first.</p>
         </div>
         <button class="settings-action primary" type="button" id="cancelDeleteHistoryBtn">Cancel</button>
