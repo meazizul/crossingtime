@@ -8,11 +8,16 @@ than commit history. They are accurate to the day.
 
 ---
 
-## 2026-11-22 (build 28, in preparation) — designed sounds and a natural voice
+## 2026-11-22 (build 28) — designed sounds, a natural voice, and the build 27 review
 
 From Cindi Lashinsky's bug tracker (feature request F14, her decisions of 18
-November, and the first items of the build 27 review, 27.x) and from testers
-who found the tones too plain and the spoken voice robotic. Not released yet.
+November, and the review of build 27, items 27.x) and from testers who found
+the tones too plain and the spoken voice robotic.
+
+Released without the tracker's real-phone release checklist: everything
+below was checked by automated tests, on the iPhone simulators and on the
+Android emulator, not yet on a phone. Nobody has yet chosen the sounds by
+ear on a phone speaker; Classic brings the old ones back.
 
 - **Designed sounds (F14).** The right sound, the wrong sound, the student's
   own sound, the button chime and the "real crossing time" tick are now short
@@ -98,6 +103,11 @@ who found the tones too plain and the spoken voice robotic. Not released yet.
     alarms, and the Bluetooth delay, are not done. 27.25 Font size, Display
     size and Bold text no longer restart the app, and the size is known
     before the first screen.
+  - *Pads on iOS 26 (found by the simulator checks for this build):* after a
+    text field had been used (the session code box, Instructor setup), iOS
+    26 could report the screen 68 points too short, and an answer pad then
+    stopped short of the bottom with the page showing under it. Earlier
+    builds did this too. A pad now always covers the whole screen.
   - *Other:* 27.11 the replay bar is no longer hidden as it starts. 27.22
     Comparison preparation is cancelled when the app is hidden during "Get
     ready". 27.23 an installed web app shows its saved copy when the server
@@ -136,13 +146,14 @@ who found the tones too plain and the spoken voice robotic. Not released yet.
 - **Size.** The recordings add about 9 MB to each app. The website fetches
   the voice in the background after the page has settled (not when the phone
   asks to save data), so it is there offline.
-- **Checked.** 397 automated tests (76 new). iPhone 17 Pro Max simulator:
-  all 14 sounds and the recorded sentences load, cues and voice play through the
-  app's own player, and the loudest mix stays under full scale. Android 16
-  emulator: sounds and the recorded voice play in the app; a font-size change
-  no longer restarts it; a report is shared from the narrower folder. **Not yet heard
-  on a real phone's speaker**, which is where the choice of sounds has to be
-  made.
+- **Checked.** 398 automated tests (77 new). The in-app end-to-end checks on
+  four iPhone simulators (14 Pro Max on iOS 27, 17 Pro Max on iOS 26, 18 Pro
+  Max, 17): 169 of 169 on each; several students survive a relaunch and a
+  wiped web-view storage. Android 16 emulator: sounds and the recorded voice
+  play, a font-size change no longer restarts the app, a report is shared
+  from the narrower folder, per-student history files and the audio-clock
+  wait work. **Not checked on a real phone, and not yet heard on a phone's
+  speaker**, which is where the choice of sounds has to be made.
 
 To rebuild the recordings after a change of wording:
 `node tools/voice-phrases.mjs > phrases.json`, then

@@ -794,3 +794,21 @@ test("27.27 (first step): in a browser, 'I use a screen reader' makes the app le
   expect(await page.evaluate(() => gsScreenReaderOn())).toBe(true);
   await expect(page.locator("#a11yWebScreenReader")).toBeChecked();
 });
+
+test("build 28: a pad and 'Read it larger' cover the whole screen even when the system reports a too-small screen height (iOS 26 after a text field)", async ({ page }) => {
+  await openApp(page);
+  await setTimes(page);
+  const result = await page.evaluate(() => {
+    document.documentElement.style.setProperty("--viewport-height", `${innerHeight - 68}px`);     // what iOS 26 left behind
+    gsOpenAnswerPad({ title: "Was it longer or shorter?", onAnswer: () => {} });
+    const pad = document.getElementById("answerOverlay").getBoundingClientRect();
+    gsPadReadOpen(document.getElementById("answerOverlay"));
+    const read = document.getElementById("padReadOverlay").getBoundingClientRect();
+    gsPadReadClose();
+    gsCloseAnswerPad();
+    return { screen: innerHeight, pad: Math.round(pad.height), padTop: pad.top, read: Math.round(read.height) };
+  });
+  expect(result.padTop).toBe(0);
+  expect(result.pad).toBe(result.screen);
+  expect(result.read).toBe(result.screen);
+});
