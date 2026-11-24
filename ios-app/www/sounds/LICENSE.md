@@ -21,4 +21,11 @@ Changes made: converted to 16-bit mono WAV, the silent tail cut with a 15 ms
 fade, and every file set to the same peak level. The start of each file is
 untouched, so a sound begins on its first sample.
 
+Build 29: the right and wrong sounds were too long to hear the "now" in
+them (Cindi Lashinsky, 22 November 2026). In `bright/right-a`,
+`bright/right-b`, `bright/wrong-a`, `bright/wrong-b`, `warm/right-a` and
+`warm/right-b` each note still starts as recorded but is held for 0.11
+seconds (the last note for 0.25), so each sound is now under half a second.
+`ios-app/tools/sound-tighten.py` does it.
+
 The steady warning-time sound is not a recording: the app generates it.

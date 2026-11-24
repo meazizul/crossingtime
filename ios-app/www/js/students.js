@@ -332,8 +332,24 @@ async function gsStudentsCommitAndReload(message) {
   try {
     if (window.gsStore?.commitNow) await window.gsStore.commitNow();
   } catch (error) { /* the reload still shows the data in localStorage */ }
-  if (typeof window.__gsStudentsReload === "function") window.__gsStudentsReload();
-  else window.location.reload();
+  const reload = () => {
+    if (typeof window.__gsStudentsReload === "function") window.__gsStudentsReload();
+    else window.location.reload();
+  };
+  // Tracker 28.6: a link opened from Safari or Messages reaches the app
+  // while the iPhone is still bringing it forward. Starting the page again
+  // at that moment could leave the app drawn small until it was closed. So
+  // the restart waits until the app is on screen.
+  if (document.visibilityState !== "hidden") {
+    reload();
+    return;
+  }
+  const whenShown = () => {
+    if (document.visibilityState === "hidden") return;
+    document.removeEventListener("visibilitychange", whenShown);
+    setTimeout(reload, 250);
+  };
+  document.addEventListener("visibilitychange", whenShown);
 }
 
 /* The registry with the active student's code kept in step with the

@@ -29,9 +29,15 @@ The link is:
 
 1. Open the link on your iPhone. You can tap it in a message or an email, or
    type it into Safari.
-2. TestFlight opens.
+2. TestFlight opens and shows CrossingTime.
 3. Press **Accept**.
 4. Press **Install**.
+
+If you opened the link before you had TestFlight, open the link again now.
+Do not open TestFlight by itself: it shows **Redeem** and asks for an
+invitation code. You do not need an invitation, an email or a code to
+install CrossingTime. (The session code is a different thing: CrossingTime
+itself asks for it the first time you open it.)
 
 CrossingTime now appears on your home screen. Open it like any other app.
 

@@ -3055,6 +3055,11 @@
 
     /* The phone's own voice: any text at all. */
     function gsSpeakPhone(text, { done, interrupt, maxWaitMs, onDone }) {
+      // Tracker 28.5: a recorded sentence that this one cuts off ends here,
+      // quietly. Left to the phone, the cut-off recording came back as
+      // "not completed", was taken for a recording that could not play, and
+      // was said again in the phone's voice after the new sentence.
+      if (interrupt && gsVoiceClipActive) gsVoiceClipActive.stop();
       if (nativeSpeech) {
         // Spoken by the app itself: on iPhone through the same session as the
         // tones, so the silent switch cannot mute "Get ready" either; on
@@ -3127,7 +3132,10 @@
     /** Start a stretch where nothing may talk over the timing sounds. */
     function gsBeginQuiet() {
       suppressSrAnnouncements = true;
-      if (a11ySettings.selfVoice) gsStopSpeech();
+      // Tracker 28.1: whatever the app is still saying stops here. It used
+      // to stop only with "Speak directions aloud" on, but the result of a
+      // try is spoken without it, and went on over the next sample.
+      gsStopSpeech();
     }
 
     /* ---------------- Spoken replay word and descriptions (build 15) ----------------
@@ -3641,6 +3649,9 @@
       if (!started) {
         if (!validateSetup()) return;
         started = true;
+        // Tracker 28.1: the words about the last try ("That was your taps,
+        // then the crossing time...") stop when the next try begins.
+        gsStopSpeech();
         gsKeepAwakeFor("practice", true);
         lockModeSelection(true);
         lockSettings(true);

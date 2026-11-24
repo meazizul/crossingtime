@@ -31,8 +31,8 @@ let gsCurrentScreen = "home";
  * and CACHE_VERSION (sw.js). In the native app the real bundle values are
  * read from the App plugin and override these. */
 const GS_APP_VERSION = "1.0";
-const GS_APP_BUILD = "28";
-const GS_APP_DATE = "22 November 2026";
+const GS_APP_BUILD = "29";
+const GS_APP_DATE = "24 November 2026";
 
 async function gsRenderAbout() {
   const el = document.getElementById("aboutVersion");
@@ -586,6 +586,19 @@ function gsShowDisclaimer({ thenTutorial = false } = {}) {
   const dialog = document.getElementById("disclaimerModal");
   if (!dialog || typeof dialog.showModal !== "function") return;
   dialog.dataset.thenTutorial = String(thenTutorial);
+  // Tracker 27.27: on the website the first-run box also asks, once,
+  // whether a screen reader is in use. A browser cannot tell the page.
+  const askScreenReader = document.getElementById("disclaimerScreenReader");
+  if (askScreenReader) {
+    askScreenReader.hidden = isNativeShell;
+    // "Show the safety notes again" opens this box too: it shows the
+    // answer already given, so pressing "I understand" does not undo it.
+    const already = typeof gsWebScreenReader === "function" && gsWebScreenReader();
+    const yes = document.getElementById("disclaimerScreenReaderYes");
+    const no = document.getElementById("disclaimerScreenReaderNo");
+    if (yes) yes.checked = already;
+    if (no) no.checked = !already;
+  }
   if (!dialog.open) {
     lockPageScroll();
     setMainContentInert(true);
@@ -604,6 +617,16 @@ function gsBindDisclaimer() {
   dialog.addEventListener("cancel", (event) => event.preventDefault());
   document.getElementById("disclaimerAcceptBtn")?.addEventListener("click", () => {
     localStorage.setItem(GS_DISCLAIMER_KEY, "true");
+    // Tracker 27.27: the answer sets "I use a screen reader in this
+    // browser" (Accessibility), where it can be changed later.
+    const askScreenReader = document.getElementById("disclaimerScreenReader");
+    if (askScreenReader && !askScreenReader.hidden) {
+      const yes = Boolean(document.getElementById("disclaimerScreenReaderYes")?.checked);
+      try { localStorage.setItem("om-a11y-web-screen-reader", String(yes)); } catch (error) { /* stays as it was */ }
+      const box = document.getElementById("a11yWebScreenReader");
+      if (box) box.checked = yes;
+      if (yes && typeof gsStopSpeech === "function") gsStopSpeech();
+    }
     const thenTutorial = dialog.dataset.thenTutorial === "true";
     dialog.close();
     if (thenTutorial && !localStorage.getItem(GS_TUTORIAL_KEY)) {

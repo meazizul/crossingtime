@@ -97,6 +97,17 @@ class SceneDelegate: UIResponder, UIWindowSceneDelegate {
         }
     }
 
+    /// Tracker 28.6: after a setup link handed over from Safari or Messages,
+    /// the page was sometimes left drawn at about 70% of its size until the
+    /// app was closed. If the page is zoomed out when the app comes forward,
+    /// it is put back to full size. A page the student has zoomed in (scale
+    /// above 1) is left alone.
+    func sceneDidBecomeActive(_ scene: UIScene) {
+        guard let webView = (window?.rootViewController as? CAPBridgeViewController)?.webView else { return }
+        let scroll = webView.scrollView
+        if scroll.zoomScale < 0.99 { scroll.setZoomScale(1, animated: false) }
+    }
+
     func scene(_ scene: UIScene, openURLContexts URLContexts: Set<UIOpenURLContext>) {
         for context in URLContexts {
             _ = ApplicationDelegateProxy.shared.application(UIApplication.shared, open: context.url, options: [:])

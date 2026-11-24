@@ -19,7 +19,11 @@ const key = (s) => s.replace(/​/g, "").replace(/\s+/g, " ").trim().replace(/[.
 // Words a template may choose between.
 const CHOICES = [
   [/\$\{gsVerdictWords\([^)]*\)\}/g, ["within the margin", "outside the margin"]],
-  [/\$\{gsAnswerTruthWords\([^}]*\)\}/g, ["longer", "shorter", "about the same"]]
+  [/\$\{gsAnswerTruthWords\([^}]*\)\}/g, ["longer", "shorter", "about the same"]],
+  // Tracker 28.4: "How much longer?" and "How much shorter?" in Compare and
+  // at the street.
+  [/\$\{direction\}/g, ["longer", "shorter"]],
+  [/\$\{gsLiveState\.category\}/g, ["longer", "shorter"]]
 ];
 const TERNARY = /\$\{[^{}?]*\?\s*"([^"]*)"\s*:\s*"([^"]*)"\s*\}/;
 
@@ -50,6 +54,16 @@ const html = readFileSync(new URL("index.html", root), "utf8")
 for (const m of html.matchAll(/>([^<>]+)</g)) {
   const t = m[1].replace(/&amp;/g, "&").replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&nbsp;/g, " ").replace(/\s+/g, " ").trim();
   if (t) texts.add(t);
+}
+
+// Tracker 28.4: the result of a Start, Halfway, Finish try is built from the
+// marks' names, which no pattern above can follow. Its eight forms (said in
+// full, and in short with "announce results" off) are listed here.
+for (const half of ["within the margin", "outside the margin"]) {
+  for (const finish of ["within the margin", "outside the margin"]) {
+    texts.add(`That was your taps, then halfway: ${half}, and finish: ${finish}.`);
+    texts.add(`Halfway: ${half}, finish: ${finish}.`);
+  }
 }
 
 const SHORT = new Set(["get ready", "replay", "correct", "not correct", "updated", "saved", "copied", "deleted", "unlocked", "locked", "ready", "listen", "wait", "now", "longer", "shorter", "about the same"]);

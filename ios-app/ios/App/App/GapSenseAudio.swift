@@ -514,8 +514,9 @@ final class GSSpeech: NSObject, AVSpeechSynthesizerDelegate, @unchecked Sendable
     }
 
     /// Build 28: the most natural US English voice on this phone. A Premium
-    /// or Enhanced voice the person has downloaded (Settings, Accessibility,
-    /// Spoken Content, Voices) sounds far less robotic than the compact
+    /// or Enhanced voice the person has downloaded (Settings, General,
+    /// Read & Speak, Voices on iOS 27; Settings, Accessibility, Spoken
+    /// Content, Voices on iOS 26 and earlier) sounds far less robotic than the compact
     /// voice every phone starts with; without one, the phone's own default
     /// for US English is used, as before. Checked again every few minutes,
     /// so a voice downloaded while the app is open is picked up.

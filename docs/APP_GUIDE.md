@@ -545,7 +545,8 @@ from recordings of one natural voice that come with the app. A sentence with
 a number or a student's code in it cannot be recorded ahead of time, so the
 phone's voice says those. **This phone's own voice** uses the phone's voice
 for everything, as before build 28. On iPhone the phone's voice sounds much
-better with a Premium or Enhanced voice downloaded (iOS Settings,
+better with a Premium or Enhanced voice downloaded (on iOS 27: Settings,
+General, Read & Speak, Voices; on iOS 26 and earlier: Settings,
 Accessibility, Spoken Content, Voices); the app uses it when it is there.
 
 For what the recordings do not cover, on iPhone and Android the app speaks

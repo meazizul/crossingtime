@@ -8,6 +8,73 @@ than commit history. They are accurate to the day.
 
 ---
 
+## 2026-11-24 (build 29, not yet released) — shorter sounds, speech that stops, and a feedback form
+
+From Cindi Lashinsky's tracker entries for build 28 (28.1, 28.4 to 28.7), her
+note of 22 November on the sounds, and her answer on 27.27.
+
+Checked by automated tests only so far. The new sounds have not been heard
+by anyone yet, and 28.6 can only be confirmed on an iPhone.
+
+- **Shorter right and wrong sounds.** Both right sounds in Bright and Warm,
+  and both wrong sounds in Bright, were two or three notes held for about a
+  quarter of a second each, 0.5 to 1.0 seconds in all: too long to hear the
+  "now" in them. Each note still starts exactly as recorded but is held for
+  0.11 seconds, and the last for 0.25, so every one of them is now under half
+  a second. They still begin on their first sample and still go up, or down,
+  as before (`ios-app/tools/sound-tighten.py`). Not changed: "my own sound",
+  which Cindi found hard to hear and close to Warm's wrong sound A. That
+  needs a choice by ear.
+- **Speech stops when the next try begins (28.1).** "That was your taps, then
+  the crossing time..." used to carry on over the next try. It now stops when
+  Begin is pressed in Practice, and at the start of every sample and replay,
+  with "Speak directions aloud" on or off.
+- **One voice for the whole result (28.4).** The result of a Start, Halfway,
+  Finish try, and "How much longer?" and "How much shorter?", had no
+  recording, so the phone's voice said them in the middle of the natural
+  voice. They are recorded now (21 new recordings in all).
+- **A cut-off sentence is not repeated (28.5).** When a sentence in the
+  phone's voice interrupted a recorded one, the iPhone app said the
+  interrupted sentence again afterwards in the phone's voice. The recording
+  now simply stops. In a browser and on Android the two voices no longer
+  overlap either.
+- **The app drawn small after "Open in the CrossingTime app" (28.6).** The
+  likely cause was found in the iPhone simulator: in Instructor setup the
+  "Traffic drives on" drop-down, whose longest choice is wider than the
+  screen, made the whole page about 100 points wider than the phone (545
+  against 440 on an iPhone 17 Pro Max), and an iPhone may then draw the page
+  small to fit. The words are now cut off inside the box and every page is
+  exactly as wide as the screen. Also: the page can no longer be drawn
+  smaller than the screen (pinch to zoom in is unchanged); the empty Date
+  started box cannot stick out past its card; after a link, the page starts
+  again only once the app is on screen; and the iPhone app puts a zoomed-out
+  page back to full size when it comes forward. The shrunk state itself was
+  not reproduced, so this still needs the check on an iPhone.
+- **Where to get a better iPhone voice (28.7).** The guide named a setting
+  that iOS 27 has moved. It now gives both: Settings, General, Read & Speak,
+  Voices on iOS 27; Settings, Accessibility, Spoken Content, Voices before.
+- **"Do you use a screen reader?" (27.27).** On the website only, the first
+  screen now asks this once. Yes sets "I use a screen reader in this
+  browser", so "Replay" and the results go to the screen reader and the app's
+  own voice stays quiet. The iPhone and Android apps find out by themselves
+  and do not ask. Someone who had already been through the first screen
+  before this build is not asked; the setting is in Accessibility.
+- **Feedback.** Help has a new **Feedback** card with a **Give feedback**
+  link to a short Google form (ten optional questions). It opens in the
+  browser. The app itself still sends nothing.
+- **Install page.** crossingtime.app now says plainly that no invitation or
+  code is needed to install, and not to use TestFlight's "Redeem": an
+  attendee had been stopped there.
+- **Checked.** 410 automated tests pass (12 new). The in-app end-to-end
+  check passes 169 of 169 on four iPhone simulators (14 Pro Max, 17 Pro Max,
+  18 Pro Max, 17), and every page there is exactly as wide as the screen. On
+  the Android emulator: the session code box takes digits from the on-screen
+  keyboard, Help shows build 29, and Give feedback opens the browser. Not
+  checked: anything on a real phone; how the new sounds sound; the feedback
+  link on an iPhone.
+
+---
+
 ## 2026-11-22 (build 28) — designed sounds, a natural voice, and the build 27 review
 
 From Cindi Lashinsky's bug tracker (feature request F14, her decisions of 18
