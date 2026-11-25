@@ -8,13 +8,15 @@ than commit history. They are accurate to the day.
 
 ---
 
-## 2026-11-24 (build 29, not yet released) — shorter sounds, speech that stops, and a feedback form
+## 2026-11-25 (build 29) — shorter sounds, speech that stops, and a feedback form
 
 From Cindi Lashinsky's tracker entries for build 28 (28.1, 28.4 to 28.7), her
 note of 22 November on the sounds, and her answer on 27.27.
 
-Checked by automated tests only so far. The new sounds have not been heard
-by anyone yet, and 28.6 can only be confirmed on an iPhone.
+Released without the tracker's real-phone release checklist: everything
+below was checked by automated tests, on the iPhone simulators and on the
+Android emulator, not on a phone. The new sounds have not been heard by
+anyone yet, and 28.6 can only be confirmed on an iPhone.
 
 - **Shorter right and wrong sounds.** Both right sounds in Bright and Warm,
   and both wrong sounds in Bright, were two or three notes held for about a

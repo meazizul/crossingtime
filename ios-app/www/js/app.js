@@ -32,7 +32,7 @@ let gsCurrentScreen = "home";
  * read from the App plugin and override these. */
 const GS_APP_VERSION = "1.0";
 const GS_APP_BUILD = "29";
-const GS_APP_DATE = "24 November 2026";
+const GS_APP_DATE = "25 November 2026";
 
 async function gsRenderAbout() {
   const el = document.getElementById("aboutVersion");
