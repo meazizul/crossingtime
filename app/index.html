@@ -19,7 +19,9 @@
 <html lang="en-US">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <!-- minimum-scale=1 (tracker 28.6): the iPhone app must never draw the whole
+       page smaller than the screen. Pinch to zoom in still works. -->
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, minimum-scale=1.0, viewport-fit=cover" />
   <title>CrossingTime</title>
   <meta name="description" content="Build a felt sense of how long it takes you to cross a street. An O&amp;M timing trainer for blind and low-vision travelers, used with an Orientation and Mobility Specialist." />
 
@@ -447,6 +449,14 @@
           <li><strong>Progress.</strong> The student can show you the Progress screen, or send you a written report. The app collects no data: their practice is kept on their phone, and in the phone's own backup if it is on, and reaches you only if they send it.</li>
           <li><strong>Experimental.</strong> The adaptive margin is off by default and unproven; turn it on in Instructor setup only to try it.</li>
         </ul>
+      </section>
+
+      <!-- Build 29: a way to tell the team what worked and what did not. -->
+      <section class="card">
+        <h2 class="card-label">Feedback</h2>
+        <p class="field-help">Tell the CrossingTime team what worked and what did not. The form is short, and every question is optional.</p>
+        <a class="settings-action primary link-button" id="feedbackLink" href="https://docs.google.com/forms/d/e/1FAIpQLSenDcpqvuEOHs8yoaxJ5reDTP8PuF64dcas29xQx_5K2TW9Bw/viewform" target="_blank" rel="noopener noreferrer">Give feedback</a>
+        <p class="field-help">The form opens in your browser and needs the internet. The app sends nothing with it: only what you write in the form is shared.</p>
       </section>
 
       <section class="card">
@@ -1081,6 +1091,16 @@
         <div class="setup-group">
           <h3 class="setup-heading">Got a link from your instructor?</h3>
           <p class="field-help">Open it now. It sets up this app for you. If the app was not installed when you first tapped the link, go back and tap it again, then choose "Open in the CrossingTime app".</p>
+        </div>
+        <!-- Build 29 (tracker 27.27; Cindi, 22 Nov 2026): asked once, on the
+             website only. The iPhone and Android apps find out by themselves. -->
+        <div class="setup-group" id="disclaimerScreenReader" hidden>
+          <fieldset class="option-group">
+            <legend class="option-group-title">Do you use a screen reader?</legend>
+            <label><input type="radio" name="disclaimerScreenReaderChoice" id="disclaimerScreenReaderNo" value="no" checked /> No</label>
+            <label><input type="radio" name="disclaimerScreenReaderChoice" id="disclaimerScreenReaderYes" value="yes" /> Yes: VoiceOver, TalkBack, JAWS or NVDA</label>
+          </fieldset>
+          <p class="setup-note">A website cannot tell that a screen reader is on. If you choose Yes, the app leaves the talking to your screen reader, so you hear one voice, not two. You can change this later in Accessibility.</p>
         </div>
         <button class="settings-action primary" type="button" id="disclaimerAcceptBtn">I understand</button>
       </div>

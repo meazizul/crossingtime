@@ -1912,11 +1912,32 @@ body.large-text-layout .step-button { grid-template-columns: minmax(0, 1fr); }
   font: inherit;
 }
 .text-input:focus-visible { outline: 4px solid var(--outline); outline-offset: 2px; }
+/* Tracker 28.6: no drop-down may be wider than its place, whatever its
+   longest choice is (see the note on #screen-instructor select below). */
+select { max-width: 100%; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+/* Tracker 28.6: on iPhone an empty date box keeps its own width and stuck
+   out past its card, which can make the whole page be drawn smaller. */
+input[type="date"].text-input {
+  display: block;
+  box-sizing: border-box;
+  min-width: 0;
+  max-width: 100%;
+  -webkit-appearance: none;
+  appearance: none;
+}
 #screen-instructor .setup { display: flex; flex-direction: column; gap: 14px; }
 #screen-instructor select,
 #screen-live select {
   width: 100%;
   max-width: 100%;
+  /* Tracker 28.6: on iPhone a drop-down whose longest choice is wider than
+     the screen ("Left side of the road (United Kingdom, ...") made the whole
+     page about 100 points wider than the phone, and the page could then be
+     drawn small to fit. The words are now cut off inside the box. */
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   padding: 12px;
   border-radius: var(--radius-sm);
   border: 2px solid var(--border);
