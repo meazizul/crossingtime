@@ -325,8 +325,16 @@ async function gsStudentsPutAway() {
   else setTimeout(() => run(false), 0);
 })();
 
-async function gsStudentsCommitAndReload(message) {
-  try { sessionStorage.setItem("gs-students-note", message || ""); } catch (error) { /* ignore */ }
+/* `where`: "home" after a setup link (the student tapped it), otherwise the
+ * instructor goes back to Instructor setup. Set on every restart, so a mark
+ * left by an earlier link that was refused cannot send an instructor's
+ * switch or add to Home (tracker 29.2). */
+async function gsStudentsCommitAndReload(message, where = "instructor") {
+  try {
+    sessionStorage.setItem("gs-students-note", message || "");
+    if (where === "home") sessionStorage.setItem("gs-students-note-where", "home");
+    else sessionStorage.removeItem("gs-students-note-where");
+  } catch (error) { /* ignore */ }
   // The student who has just stopped being the one in use (27.38).
   try { await gsStudentsPutAway(); } catch (error) { /* stays inside om-students */ }
   try {
@@ -541,8 +549,7 @@ function gsStudentsRouteSetupLink(code) {
     try { sessionStorage.setItem("gs-students-note", gsStudentsLinkRefusal); } catch (error) { /* ignore */ }
     return "refused";
   }
-  try { sessionStorage.setItem("gs-students-note-where", "home"); } catch (error) { /* ignore */ }
-  gsStudentsCommitAndReload(message);
+  gsStudentsCommitAndReload(message, "home");
   return true;
 }
 
