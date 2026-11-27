@@ -43,8 +43,9 @@ CrossingTime now appears on your home screen. Open it like any other app.
 
 ### Step 3. Check vibration
 
-1. Open **CrossingTime**. The first time, it tells you the app is for use with
-   your O&M Specialist. Press **I understand**.
+1. Open **CrossingTime**. If it asks for a session code, type the one you were
+   given and press **Unlock**, or press **Later**. Then it tells you the app is
+   for use with your O&M Specialist. Press **I understand**.
 2. Find the **person** button at the top of the screen. It opens
    **Accessibility**.
 3. **Vibrate on cue** is already on.

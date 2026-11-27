@@ -8,6 +8,45 @@ than commit history. They are accurate to the day.
 
 ---
 
+## 2026-11-27 (build 30) — the session code first, and students that switch
+
+From Cindi Lashinsky's three tracker entries for build 29 (29.1 to 29.3),
+after she tried build 29 on her iPhone.
+
+Released without the tracker's real-phone release checklist: everything
+below was checked by automated tests in a browser and with a stand-in for the
+installed app, not on a phone.
+
+- **The session code comes first (29.1).** On the first start of a phone that
+  has not been unlocked, the session code pop-up is now the first thing that
+  opens. Before, the O&M notice and the sound tutorial came first, and the
+  place to type the code was under the tutorial. Unlocking, or pressing
+  **Later**, goes on to the O&M notice (which still cannot be skipped) and
+  then the sound tutorial, each once. A later start on a phone that is still
+  locked opens only the code. Requirement from Cindi, 25 November 2026.
+- **Switching or adding a student works after opening a setup link (29.2).**
+  When the installed app had been opened from a setup link, choosing another
+  student, or adding one, went back to the link's student and landed on Home.
+  Switching restarts the page, not the app, and the phone hands back the same
+  link on every restart, so the link was applied again each time. The link
+  the app was opened with is now applied once for each time the app is
+  opened; a link tapped while the app is open is still applied. A switch or
+  an add by the instructor always comes back to Instructor setup, even if an
+  earlier link left a mark to stay on Home. Workaround in build 29: close the
+  app fully and open it from its icon.
+- **A setup link in a browser offers the app first (29.3).** In a browser
+  that has no saved data, such as a private window, a setup link asked for
+  the session code every time and never offered to open the CrossingTime app.
+  The offer to open the app now comes first, before the session code, the
+  notice and the tutorial, because the installed app already holds the
+  unlock. After the code is entered, the offer comes again.
+- The install guide and the landing page say the code may be asked for first.
+
+Not in this build, and why: 28.10 (spoken results: Full, Short, Off) and D1
+to D4 wait on Cindi's answers; 27.12, 28.2, 28.3, 28.8 and F15 are one design
+to be built after SOMA/SWOMA; 27.18 (Android calls, alarms and Bluetooth
+delay) needs a phone to test.
+
 ## 2026-11-25 (build 29) — shorter sounds, speech that stops, and a feedback form
 
 From Cindi Lashinsky's tracker entries for build 28 (28.1, 28.4 to 28.7), her

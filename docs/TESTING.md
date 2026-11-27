@@ -15,8 +15,8 @@ npm run lan
 Open the printed `http://localhost:8000/` address.
 
 Then:
-1. On first run, press **I understand** on the O&M notice, then close the
-   sound tutorial.
+1. On first run, enter the session code (or press **Later**), press
+   **I understand** on the O&M notice, then close the sound tutorial.
 2. Home → **Instructor setup** → enter `4`, `8`, `0.4` → **Back**.
 3. Home → **Practice my timing**. Choose mode **Start → Halfway**.
 4. Press **BEGIN**, count "one-thousand-one … one-thousand-four", press **MARK**.
@@ -370,7 +370,7 @@ was discarded.)*
 Delete the app's data (or use a fresh browser profile) and open it.
 
 **Pass:**
-- [ ] "Before you start" appears first: use with an O&M Specialist, not a replacement for instruction
+- [ ] While the phone is locked, the session code pop-up appears first (build 30); after the code or **Later**, "Before you start" appears: use with an O&M Specialist, not a replacement for instruction
 - [ ] Escape does not close it; **I understand** does, then the sound tutorial opens
 - [ ] Home shows the O&M line at the top
 - [ ] With VoiceOver, one swipe per activity reads "Practice my timing, Develop an accurate sense…, button"; there is no hidden "Home" heading

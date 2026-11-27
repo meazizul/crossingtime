@@ -1992,16 +1992,42 @@
       return false;
     }
 
+    /*
+     * Tracker 29.2: the link the app was opened with is applied once.
+     * Switching or adding a student restarts the page, not the app, so the
+     * phone still hands back the same launch link afterwards. It used to be
+     * applied again on every restart: the app went back to the link's
+     * student and stayed on Home. The link that has been handled is kept for
+     * this run of the app (session storage, which ends when the app is
+     * closed), and a restart skips it. A link opened while the app is
+     * running arrives through appUrlOpen and is always handled.
+     */
+    const GS_LAUNCH_URL_HANDLED = "gs-launch-url-handled";
+
+    function launchUrlHandled(url) {
+      try { return sessionStorage.getItem(GS_LAUNCH_URL_HANDLED) === url; } catch (error) { return false; }
+    }
+
+    function markLaunchUrlHandled(url) {
+      try { sessionStorage.setItem(GS_LAUNCH_URL_HANDLED, url); } catch (error) { /* applied again after a restart, as before */ }
+    }
+
     function bindNativeAppUrls() {
       const AppPlugin = CapacitorGlobal?.Plugins?.App;
       if (!isNativeShell || !AppPlugin) return;
       try {
-        AppPlugin.addListener?.("appUrlOpen", (event) => handleAppUrl(event?.url));
+        AppPlugin.addListener?.("appUrlOpen", (event) => {
+          if (event?.url) markLaunchUrlHandled(event.url);
+          handleAppUrl(event?.url);
+        });
         const launch = AppPlugin.getLaunchUrl?.();
         if (launch && typeof launch.then === "function") {
           launch.then((result) => {
+            const url = result?.url;
+            if (!url || launchUrlHandled(url)) return;
+            markLaunchUrlHandled(url);
             // Wait for the shell to finish booting before navigating.
-            if (result?.url) setTimeout(() => handleAppUrl(result.url), 0);
+            setTimeout(() => handleAppUrl(url), 0);
           }).catch(() => {});
         }
       } catch (error) {
@@ -2009,18 +2035,25 @@
       }
     }
 
-    /* After a browser imports a setup, offer to open the same setup in the app. */
+    /* Tracker 29.3: whether a browser has a setup to hand to the app. */
+    function gsOpenInAppPending() {
+      return !isNativeShell && Boolean(lastImportedToken);
+    }
+
+    /* After a browser imports a setup, offer to open the same setup in the app.
+     * Returns true when the offer is on screen. */
     function offerOpenInApp() {
-      if (isNativeShell || !lastImportedToken) return;
+      if (!gsOpenInAppPending()) return false;
       const dialog = document.getElementById("openInAppModal");
       const link = document.getElementById("openInAppLink");
-      if (!dialog || !link || typeof dialog.showModal !== "function") return;
+      if (!dialog || !link || typeof dialog.showModal !== "function") return false;
       link.href = `${GS_APP_SCHEME}://setup?ts=${lastImportedToken}`;
-      if (dialog.open) return;
+      if (dialog.open) return true;
       lockPageScroll();
       setMainContentInert(true);
       dialog.showModal();
       document.getElementById("openInAppTitle")?.focus();
+      return true;
     }
 
     function validateShareSetup() {

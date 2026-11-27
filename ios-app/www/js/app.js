@@ -31,8 +31,8 @@ let gsCurrentScreen = "home";
  * and CACHE_VERSION (sw.js). In the native app the real bundle values are
  * read from the App plugin and override these. */
 const GS_APP_VERSION = "1.0";
-const GS_APP_BUILD = "29";
-const GS_APP_DATE = "25 November 2026";
+const GS_APP_BUILD = "30";
+const GS_APP_DATE = "27 November 2026";
 
 async function gsRenderAbout() {
   const el = document.getElementById("aboutVersion");
@@ -402,6 +402,14 @@ async function gsSessionCodeSubmit(which = "card") {
     ? "Unlocked. The activities are open."
     : "Unlocked. Crossing times are needed before the activities open: open Instructor setup, or try it with example times.", "ok");
   if (next) setTimeout(() => next.focus({ preventScroll: true }), 300);
+  // Tracker 29.3: a setup link opened in this browser is offered to the
+  // app once the code is in. In the first-run pop-up the sequence does this
+  // (and does not repeat an offer already declined at its start).
+  if (!(gsFirstRunActive && which === "modal")) {
+    setTimeout(() => {
+      if (!gsAnyDialogOpen() && typeof offerOpenInApp === "function") offerOpenInApp();
+    }, 400);
+  }
 }
 
 function gsRenderLock() {
@@ -582,6 +590,65 @@ function gsBindSafetyNotes() {
 
 const GS_DISCLAIMER_KEY = "om-disclaimer-ack";
 
+/*
+ * The first-run steps, in order, each at most once per start.
+ *
+ *   1. In a browser that has just opened a setup link: the offer to open
+ *      the CrossingTime app (tracker 29.3). The installed app already holds
+ *      the unlock, so this comes before the code is asked for.
+ *   2. While the phone is locked: the session code. Requirement (Cindi,
+ *      25 Nov 2026, tracker 29.1): the code box is the first thing opened
+ *      on first launch. Unlocking, or pressing Later, goes on to step 3.
+ *   3. The O&M notice, until accepted. It cannot be skipped.
+ *   4. The sound tutorial, until seen.
+ *   5. The offer to open the app, if a setup link came in and it was not
+ *      made at step 1 (for example after the code was entered).
+ *
+ * Each pop-up's close calls gsFirstRunNext() while the sequence is running;
+ * opened later from Help, the same pop-ups behave as they always have.
+ */
+let gsFirstRunActive = false;
+let gsFirstRunOffered = false;
+let gsFirstRunCodeAsked = false;
+
+function gsFirstRunStart() {
+  gsFirstRunActive = true;
+  gsFirstRunNext();
+}
+
+function gsFirstRunNext() {
+  if (!gsFirstRunActive) return;
+  if (typeof gsAnyDialogOpen === "function" && gsAnyDialogOpen()) return;
+  const pending = typeof gsOpenInAppPending === "function" && gsOpenInAppPending();
+  if (pending && !gsFirstRunOffered) {
+    gsFirstRunOffered = true;
+    if (offerOpenInApp()) return;
+  }
+  if (!gsFirstRunCodeAsked && !gsIsUnlocked()) {
+    gsFirstRunCodeAsked = true;
+    gsShowSessionCodeModal("Enter your session code to start practicing.");
+    return;
+  }
+  if (!localStorage.getItem(GS_DISCLAIMER_KEY)) {
+    gsShowDisclaimer({ thenTutorial: true });
+    return;
+  }
+  if (!localStorage.getItem(GS_TUTORIAL_KEY)) {
+    gsRunTutorial();
+    return;
+  }
+  gsFirstRunActive = false;
+  if (pending && !gsFirstRunOffered) {
+    gsFirstRunOffered = true;
+    offerOpenInApp();
+  }
+}
+
+/* A pop-up of the sequence has closed: the next step, once the page has settled. */
+function gsFirstRunAfterClose(delay = 300) {
+  if (gsFirstRunActive) setTimeout(gsFirstRunNext, delay);
+}
+
 function gsShowDisclaimer({ thenTutorial = false } = {}) {
   const dialog = document.getElementById("disclaimerModal");
   if (!dialog || typeof dialog.showModal !== "function") return;
@@ -629,7 +696,9 @@ function gsBindDisclaimer() {
     }
     const thenTutorial = dialog.dataset.thenTutorial === "true";
     dialog.close();
-    if (thenTutorial && !localStorage.getItem(GS_TUTORIAL_KEY)) {
+    if (gsFirstRunActive) {
+      gsFirstRunAfterClose(250);
+    } else if (thenTutorial && !localStorage.getItem(GS_TUTORIAL_KEY)) {
       setTimeout(() => gsRunTutorial(), 250);
     } else if (typeof offerOpenInApp === "function") {
       offerOpenInApp();
@@ -653,6 +722,7 @@ function gsBindDisclaimer() {
       unlockPageScroll();
       setMainContentInert(false);
     }
+    gsFirstRunAfterClose();
   });
 }
 
@@ -1375,7 +1445,12 @@ function gsBindShell() {
       unlockPageScroll();
       setMainContentInert(false);
     }
-    // First run: the sound tutorial, then the session code until it has been entered once.
+    // First run: the sequence goes on (gsFirstRunNext). Opened later from
+    // Help on a locked phone, the tutorial still ends at the session code.
+    if (gsFirstRunActive) {
+      gsFirstRunAfterClose();
+      return;
+    }
     if (!gsIsUnlocked()) {
       setTimeout(() => gsShowSessionCodeModal("Enter your session code to start practicing."), 300);
       return;
@@ -1447,6 +1522,8 @@ function gsBoot() {
       ? document.querySelector(".step-card:not([hidden]) .step-button")
       : document.getElementById("sessionCodeInput");
     target?.focus({ preventScroll: true });
+    // Tracker 29.1: unlocking, or Later, goes on to the notice and tutorial.
+    gsFirstRunAfterClose();
   });
   if (typeof gsFeaturesInit === "function") gsFeaturesInit();
   gsComparisonInit();
@@ -1501,17 +1578,10 @@ function gsBoot() {
   gsShowScreen("home");
   gsRenderDemoNote();
 
-  if (needsDisclaimer) {
-    // Let the first paint settle before taking over the screen.
-    setTimeout(() => gsShowDisclaimer({ thenTutorial: true }), 500);
-  } else if (!localStorage.getItem(GS_TUTORIAL_KEY)) {
-    setTimeout(() => gsRunTutorial(), 700);
-  } else if (!gsIsUnlocked()) {
-    // Still locked: ask for the session code (it is entered only once, build 19).
-    setTimeout(() => gsShowSessionCodeModal("Enter your session code to start practicing."), 400);
-  } else if (typeof offerOpenInApp === "function") {
-    offerOpenInApp();
-  }
+  // Let the first paint settle before taking over the screen. The order is
+  // in gsFirstRunNext: offer the app (setup link in a browser), session
+  // code, O&M notice, tutorial (trackers 29.1 and 29.3).
+  setTimeout(gsFirstRunStart, 500);
 }
 
 if (document.readyState === "loading") {

@@ -147,13 +147,13 @@ test("the Home card works too, and old installs with a build 16-18 flag are aske
   expect(await announcer(page)).toContain("Unlocked");
 });
 
-test("first run: guidance, tutorial, then the code pop-up", async ({ page }) => {
+test("first run: the code pop-up first, then guidance and tutorial (build 30, tracker 29.1)", async ({ page }) => {
   await openApp(page, { locked: true, disclaimerSeen: false, tutorialSeen: false });
+  await expect(page.locator("#sessionCodeModal")).toBeVisible();
+  await page.click("#sessionCodeLaterBtn");
   await expect(page.locator("#disclaimerModal")).toBeVisible();
   await page.click("#disclaimerAcceptBtn");
   await expect(page.locator("#tutorialModal")).toBeVisible();
-  await page.click("#closeTutorial");
-  await expect(page.locator("#sessionCodeModal")).toBeVisible();
 });
 
 test("no double-tap zoom: every element opts out, the swipe pads keep touch-action none", async ({ page }) => {
@@ -177,7 +177,7 @@ test("the app is CrossingTime everywhere a user reads the name", async ({ page }
   expect(await page.title()).toContain("CrossingTime");
   await expect(page.locator("#screenTitle")).toHaveText("CrossingTime");
   await page.evaluate(() => gsShowScreen("help"));
-  await expect(page.locator("#aboutVersion")).toContainText("CrossingTime version 1.0, build 29");
+  await expect(page.locator("#aboutVersion")).toContainText("CrossingTime version 1.0, build 30");
   const manifest = await page.evaluate(async () => (await (await fetch("manifest.webmanifest")).json()));
   expect(manifest.name).toBe("CrossingTime");
   expect(await page.evaluate(() => document.body.innerText.includes("Gap Sense"))).toBe(false);
