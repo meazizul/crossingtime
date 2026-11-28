@@ -275,6 +275,7 @@ function gsSignalResolve(producedSec) {
     latencySec: latency
   });
   gsSignalRenderScore();
+  gsResultsTry("signal");   // one more try here, for the results in words (tracker 28.10)
 
   gsSignalState.phase = "replaying";
   gsSignalUpdateButton();
@@ -303,13 +304,17 @@ function gsSignalResolve(producedSec) {
   );
 }
 
-/* "Ready for another.", after the replay in words when those are on. */
+/* "Ready for another.", after the replay in words when the whole sentence
+ * is due. */
 function gsSignalFinishStatus() {
   const message = "Ready for another.";
-  const said = Boolean(gsSignalState.lastDescribe) && gsDescribeOn() && gsDescribe(`${gsSignalState.lastDescribe} ${message}`);
-  // Off (Low): the verdict still shows and is read, in short (tracker 20.2).
-  const verdict = !said && gsSignalState.lastVerdict ? `${gsSignalState.lastVerdict} ` : "";
-  gsSignalStatus(`${verdict}${message}`, "neutral", { announce: !said });
+  // Short (Low, or Full from the fourth try): the verdict shows and is said,
+  // in short (tracker 20.2). Off (tracker 28.10): it shows, and nothing is
+  // said after a try.
+  const shortText = `${gsSignalState.lastVerdict ? `${gsSignalState.lastVerdict} ` : ""}${message}`;
+  const whole = gsSignalState.lastDescribe ? `${gsSignalState.lastDescribe} ${message}` : "";
+  const said = gsSayTryResult(whole, shortText);
+  gsSignalStatus(said === "whole" ? message : shortText, "neutral", { announce: !said && !gsResultsWordsOff() });
 }
 
 /* Play it again (F1): the last try's replay once more, not recorded. */
