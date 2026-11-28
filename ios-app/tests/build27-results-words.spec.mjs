@@ -1,6 +1,7 @@
-// Build 27: tracker F12 (Cindi, 15 Nov 2026). "Announce results and describe
-// the sounds" can be chosen in Accessibility for every activity, or on each
-// activity page; only then does each page show its own switch.
+// Build 27: tracker F12 (Cindi, 15 Nov 2026). The results in words can be
+// chosen in Accessibility for every activity, or on each activity page; only
+// then does each page show its own choice. Build 31 (tracker 28.10): the
+// choice is Full, Short or Off, where it was a tick box.
 import { test, expect } from "@playwright/test";
 import { openApp, setTimes, watchErrors } from "./helpers.mjs";
 
@@ -14,7 +15,7 @@ async function chooseWhere(page, value) {
   }, value);
 }
 
-test("F12: by default the switch in Accessibility applies to every activity and no page shows its own", async ({ page }) => {
+test("F12: by default the choice in Accessibility applies to every activity and no page shows its own", async ({ page }) => {
   const errors = watchErrors(page);
   await openApp(page);
   await setTimes(page);
@@ -23,21 +24,21 @@ test("F12: by default the switch in Accessibility applies to every activity and 
     await page.evaluate((n) => gsShowScreen(n), name);
     await expect(page.locator(`#screen-${name} .results-words-switch`)).toBeHidden();
   }
-  await expect(page.locator("#a11yDescribeSounds")).toBeEnabled();
+  await expect(page.locator("#a11yResultsWords")).toBeEnabled();
   expect(errors).toEqual([]);
 });
 
-test("F12: 'On each activity page' shows a switch on every activity page, starting from the current choice", async ({ page }) => {
+test("F12: 'On each activity page' shows a choice on every activity page, starting from the current choice", async ({ page }) => {
   await openApp(page);
   await setTimes(page);
   await chooseWhere(page, "each");
-  await expect(page.locator("#a11yDescribeSounds")).toBeDisabled();
+  await expect(page.locator("#a11yResultsWords")).toBeDisabled();
   for (const name of PAGES) {
     await page.evaluate((n) => gsShowScreen(n), name);
     const box = page.locator(`#screen-${name} [data-results-words="${name}"]`);
     await expect(box).toBeVisible();
-    await expect(box).toBeChecked();
-    await expect(page.locator(`#screen-${name} .results-words-switch`)).toContainText("Announce results and describe the sounds");
+    await expect(box).toHaveValue("full");
+    await expect(page.locator(`#screen-${name} .results-words-switch`)).toContainText("Results in words");
   }
 });
 
@@ -46,15 +47,15 @@ test("F12: each page keeps its own choice, and descriptions follow the page on s
   await setTimes(page);
   await chooseWhere(page, "each");
   await page.evaluate(() => gsShowScreen("compare"));
-  await page.locator('#screen-compare [data-results-words="compare"]').uncheck();
+  await page.locator('#screen-compare [data-results-words="compare"]').selectOption("short");
   const state = await page.evaluate(() => ({
     compare: gsDescribeOn("compare"),
     practice: gsDescribeOn("practice"),
     onScreen: gsDescribeOn(),
     saidOnCompare: gsDescribe("That was the sample."),
-    stored: localStorage.getItem("om-a11y-describe-compare")
+    stored: localStorage.getItem("om-a11y-results-words-compare")
   }));
-  expect(state).toEqual({ compare: false, practice: true, onScreen: false, saidOnCompare: false, stored: "false" });
+  expect(state).toEqual({ compare: false, practice: true, onScreen: false, saidOnCompare: false, stored: "short" });
   await page.evaluate(() => gsShowScreen("practice"));
   expect(await page.evaluate(() => gsDescribeOn())).toBe(true);
 });
@@ -64,25 +65,25 @@ test("F12: the choice survives a restart", async ({ page }) => {
   await setTimes(page);
   await chooseWhere(page, "each");
   await page.evaluate(() => gsShowScreen("live"));
-  await page.locator('#screen-live [data-results-words="live"]').uncheck();
+  await page.locator('#screen-live [data-results-words="live"]').selectOption("short");
   await page.evaluate(() => gsStore?.commitNow?.());
   await page.reload();
   await page.waitForFunction(() => typeof gsBoot === "function");
   await page.evaluate(() => gsShowScreen("live"));
-  await expect(page.locator('#screen-live [data-results-words="live"]')).not.toBeChecked();
+  await expect(page.locator('#screen-live [data-results-words="live"]')).toHaveValue("short");
   await expect(page.locator("#a11yDescribeWhere")).toHaveValue("each");
   expect(await page.evaluate(() => [gsDescribeOn("live"), gsDescribeOn("compare")])).toEqual([false, true]);
 });
 
-test("F12: back to 'Here, for every activity' hides the page switches and the switch in Accessibility applies again", async ({ page }) => {
+test("F12: back to 'Here, for every activity' hides the page choices and the choice in Accessibility applies again", async ({ page }) => {
   await openApp(page);
   await setTimes(page);
   await chooseWhere(page, "each");
   await page.evaluate(() => gsShowScreen("practice"));
-  await page.locator('#screen-practice [data-results-words="practice"]').uncheck();
+  await page.locator('#screen-practice [data-results-words="practice"]').selectOption("short");
   await chooseWhere(page, "all");
   await expect(page.locator("#screen-practice .results-words-switch")).toBeHidden();
-  await expect(page.locator("#a11yDescribeSounds")).toBeEnabled();
+  await expect(page.locator("#a11yResultsWords")).toBeEnabled();
   expect(await page.evaluate(() => gsDescribeOn("practice"))).toBe(true);
 });
 
@@ -97,7 +98,7 @@ test("F12: a verbosity level resets every page to that level", async ({ page }) 
   });
   expect(await page.evaluate(() => ["practice", "signal", "compare", "live"].map((n) => gsDescribeOn(n)))).toEqual([false, false, false, false]);
   await page.evaluate(() => gsShowScreen("signal"));
-  await expect(page.locator('#screen-signal [data-results-words="signal"]')).not.toBeChecked();
+  await expect(page.locator('#screen-signal [data-results-words="signal"]')).toHaveValue("short");
 });
 
 /* ---------------- 22.5: follow the phone's text size and contrast ---------------- */

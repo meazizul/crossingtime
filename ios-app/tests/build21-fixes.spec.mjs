@@ -162,8 +162,16 @@ test("20.9: How much uses the touch-down time it is given", async ({ page }) => 
   expect(produced).toBeCloseTo(1.5, 2);
 });
 
-test("20.2: at Low, Comparison practice still shows and reads the short result", async ({ page }) => {
+// Build 31 (tracker 28.10): the short result is said by the app's own voice,
+// as the whole sentence is, and by the screen reader when one is running.
+test("20.2: at Low, Comparison practice still shows and says the short result", async ({ page }) => {
   await page.clock.install();
+  await page.addInitScript(() => {
+    window.__spoken = [];
+    const fake = { speaking: false, cancel() {}, speak(u) { window.__spoken.push(u.text); setTimeout(() => u.onend && u.onend(), 10); }, getVoices() { return []; } };
+    Object.defineProperty(window, "speechSynthesis", { value: fake, configurable: true });
+    window.SpeechSynthesisUtterance = function (text) { this.text = text; };
+  });
   await openApp(page, { storage: { "om-a11y-describe-sounds": "false", "om-a11y-say-replay": "false" } });
   await setTimes(page, "4", "8", "0.4");
   await page.evaluate(() => gsShowScreen("compare"));
@@ -176,6 +184,22 @@ test("20.2: at Low, Comparison practice still shows and reads the short result",
   }
   await answerOn(page, "shorter");
   await tick(page, 400);
+  await expect(page.locator("#compareStatusText")).toHaveText("Not correct.");
+  expect(await page.evaluate(() => window.__spoken.slice(-1))).toEqual(["Not correct."]);
+  expect(await announcer(page)).not.toBe("Not correct.");                 // not said twice
+});
+
+test("20.2: at Low with a screen reader, the short result goes to the screen reader", async ({ page }) => {
+  await page.clock.install();
+  await page.addInitScript(() => { window.__gsScreenReader = true; });
+  await openApp(page, { storage: { "om-a11y-describe-sounds": "false", "om-a11y-say-replay": "false" } });
+  await setTimes(page, "4", "8", "0.4");
+  await page.evaluate(() => gsShowScreen("compare"));
+  await page.evaluate(() => {
+    Object.assign(gsCompareState, { phase: "answering", intervalSec: 10, crossingSec: 8, marginSec: 0.4, rangeSec: 0.96, expected: "longer" });
+    gsCompareAnswer("same");
+  });
+  await tick(page, 100);
   await expect(page.locator("#compareStatusText")).toHaveText("Not correct.");
   expect(await announcer(page)).toBe("Not correct.");
 });

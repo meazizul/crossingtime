@@ -1,6 +1,8 @@
 // Build 20 (Cindi, 1 Nov 2026): verbosity levels with the replay word and the
 // spoken results as their own switches, no separate visual replay switch,
 // several students on one phone, no QR codes (build14-reports.spec.mjs).
+// Build 31 (tracker 28.10): the spoken results are Full, Short or Off; Low
+// sets Short, Medium and High set Full.
 import { test, expect } from "@playwright/test";
 import { openApp, setTimes, watchErrors } from "./helpers.mjs";
 
@@ -8,18 +10,18 @@ async function openA11y(page) {
   await page.evaluate(() => document.getElementById("a11yModal").showModal());
 }
 
-test("verbosity: Medium by default; Low turns off the replay word and the spoken results, High turns them on; each stays its own switch", async ({ page }) => {
+test("verbosity: Medium by default; Low turns off the replay word and sets the short result, High turns them back on; each stays its own choice", async ({ page }) => {
   await openApp(page);
   await openA11y(page);
   await expect(page.locator("#a11yVerbosity")).toHaveValue("medium");
   await expect(page.locator("#a11ySayReplay")).toBeChecked();
-  await expect(page.locator("#a11yDescribeSounds")).toBeChecked();
-  await expect(page.locator("label:has(#a11yDescribeSounds)")).toContainText("Announce results and describe the sounds");
+  await expect(page.locator("#a11yResultsWords")).toHaveValue("full");
+  await expect(page.locator('label[for="a11yResultsWords"]')).toHaveText("Results in words");
 
   await page.selectOption("#a11yVerbosity", "low");
   await expect(page.locator("#a11ySayReplay")).not.toBeChecked();
-  await expect(page.locator("#a11yDescribeSounds")).not.toBeChecked();
-  expect(await page.evaluate(() => [a11ySettings.verbosity, a11ySettings.sayReplay, a11ySettings.describeSounds])).toEqual(["low", false, false]);
+  await expect(page.locator("#a11yResultsWords")).toHaveValue("short");
+  expect(await page.evaluate(() => [a11ySettings.verbosity, a11ySettings.sayReplay, a11ySettings.resultsWords])).toEqual(["low", false, "short"]);
 
   // A switch can still be turned on by itself at Low.
   await page.check("#a11ySayReplay");
@@ -27,12 +29,12 @@ test("verbosity: Medium by default; Low turns off the replay word and the spoken
 
   await page.reload();
   await page.waitForFunction(() => typeof gsBoot === "function");
-  expect(await page.evaluate(() => [a11ySettings.verbosity, a11ySettings.sayReplay, a11ySettings.describeSounds])).toEqual(["low", true, false]);
+  expect(await page.evaluate(() => [a11ySettings.verbosity, a11ySettings.sayReplay, a11ySettings.resultsWords])).toEqual(["low", true, "short"]);
 
   await openA11y(page);
   await page.selectOption("#a11yVerbosity", "high");
   await expect(page.locator("#a11ySayReplay")).toBeChecked();
-  await expect(page.locator("#a11yDescribeSounds")).toBeChecked();
+  await expect(page.locator("#a11yResultsWords")).toHaveValue("full");
 });
 
 test("verbosity: Low says only the screen's name, High adds what is on the screen", async ({ page }) => {

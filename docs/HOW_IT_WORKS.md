@@ -343,7 +343,8 @@ before the session and needs no internet.
 learning VoiceOver or TalkBack. Separately, and for everyone, the app says
 "Replay" before every replay and describes the result and each replay in words
 afterwards; with a screen reader running those words go through the screen
-reader instead. **Siri**: "Practice my timing in CrossingTime" and
+reader instead. Since build 31 the words after a try are a choice of Full,
+Short or Off. **Siri**: "Practice my timing in CrossingTime" and
 the other three open an activity directly; on Android, touch and hold the icon.
 
 Vibration is the reason this is a native app at all. Safari on iPhone cannot

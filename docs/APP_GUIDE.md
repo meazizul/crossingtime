@@ -467,8 +467,10 @@ over the app says what you heard, in words and never in seconds: "That was
 your taps, then the crossing time: within the margin." In the comparison
 activities the right-or-wrong sound is followed by "Correct." or "Not
 correct. It was longer.", and the replay starts only when the words are over.
-Both can be turned off under Accessibility > Speech. With VoiceOver or
-TalkBack running, the words go through the screen reader instead.
+"Replay" can be turned off under Accessibility > Speech, and the results in
+words can be set there to Full, Short or Off (build 31, below). With
+VoiceOver or TalkBack running, the words go through the screen reader
+instead.
 
 ---
 
@@ -564,25 +566,50 @@ waits as long as slow speech would take.
 | Level | What the app says |
 |---|---|
 | **High** | Everything at Medium, and when a screen opens, what is on it: its sections and buttons in order. For first-time users |
-| **Medium** (default) | Directions, "Replay" before each replay, the result and the replay in words afterwards. What builds 15 to 19 did |
-| **Low** | The basics: screens say only their name; no "Replay" and no words after the sounds. The result still shows and is read in its short form |
+| **Medium** (default) | Directions, "Replay" before each replay, the result and the replay in words afterwards (Results in words: Full). What builds 15 to 19 did |
+| **Low** | The basics: screens say only their name; no "Replay", and only the short result after a try (Results in words: Short). The result still shows |
 
-**Say "Replay" before each replay** and **Announce results and describe the
-sounds** (on by default, build 15) are the two parts that slow a practised
-user down. Choosing a level sets both; each can then be changed on its own.
-They work with or without self-voicing, never with a number of seconds. The
-native apps ask the system whether VoiceOver or TalkBack is running and, if
-so, hand the same words to the screen reader.
+**Say "Replay" before each replay** (on by default, build 15) and **Results
+in words** are the two parts that slow a practised user down. Choosing a
+level sets both: High and Medium set Results in words to Full, Low sets it to
+Short. Each can then be changed on its own. They work with or without
+self-voicing, never with a number of seconds. The native apps ask the system
+whether VoiceOver or TalkBack is running and, if so, hand the same words to
+the screen reader.
 
-**Choose this: here, or on each activity page (build 27).** Below "Announce
-results and describe the sounds", **Choose this** decides where that choice is
-made. **Here, for every activity** (the default) keeps one switch for the whole
-app. **On each activity page** gives Practice my timing, Comparison
-preparation, Comparison practice and At the street their own switch, just
-below the page's introduction, so a student can have results in words where a
-task is harder or the street is noisy, and not in a quiet room (Cindi, 15 Nov
-2026). Each page starts from the current choice. Choosing a verbosity level
-resets every page to that level.
+**Results in words: Full, Short or Off (build 31).** What the app says after
+a try, once the sounds and the replay are over. Until build 30 this was the
+tick box "Announce results and describe the sounds", and with it unticked the
+short result was still read out by a screen reader or by "Speak directions
+aloud"; there was no way to have no words at all (tracker 28.10, found by
+Cindi Lashinsky; the three choices were agreed by her on 27 November 2026).
+
+| Choice | What is said after a try |
+|---|---|
+| **Full** (default) | The whole sentence, for example "That was your taps, then the crossing time: within the margin. Ready for another try.", for the first three tries in an activity. From the fourth try on, only the short result. The whole sentence comes back after three days without a try in that activity, or after a try in another activity |
+| **Short** | Only the short result, every try: "Within the margin. Ready for another try.", "Correct.", "Not correct." |
+| **Off** | Nothing: not the result, and not "Ready for another try". Nothing is spoken by the app and nothing is given to VoiceOver or TalkBack. The right and wrong sounds and the vibration carry the result, and it still shows on the screen |
+
+The short result is said the same way as the whole sentence, and to the same
+people: by VoiceOver or TalkBack when one is running, otherwise by the app's
+own voice, with or without "Speak directions aloud". It is never said by
+both, and the next step waits for the words to end.
+
+A changed choice is confirmed in words. Off is only ever chosen by hand: no
+verbosity level sets it. When the app is updated from build 30, a ticked box
+becomes Full and an unticked box becomes Short. "Replay" before a replay is
+its own tick box and is not changed by this choice. The words themselves
+("within the margin", "outside the margin") are the same as before.
+
+**Choose this: here, or on each activity page (build 27).** Below "Results in
+words", **Choose this** decides where that choice is made. **Here, for every
+activity** (the default) keeps one choice for the whole app. **On each
+activity page** gives Practice my timing, Comparison preparation, Comparison
+practice and At the street their own Full, Short or Off choice, just below
+the page's introduction, so a student can have the whole sentence where a
+task is harder or the street is noisy, and fewer words or none in a quiet
+room (Cindi, 15 Nov 2026). Each page starts from the current choice. Choosing
+a verbosity level resets every page to that level.
 
 ### Screen reader
 **Announce cues** controls spoken feedback. Prompts and results are spoken

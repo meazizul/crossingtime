@@ -246,9 +246,9 @@ Fresh install (or clear the app's data). Open the app.
 ### D9 — Verbosity and several students (build 20)
 
 **Pass:**
-- [ ] Accessibility, Speech: **How much the app says** is Medium; the two switches under it are on
-- [ ] Low turns both off; with Speak directions aloud on, a screen says only its name; the result of a try is still shown and read in short
-- [ ] High turns both on; with Speak directions aloud on (or VoiceOver on), a screen also says "On this screen. Sections: … Buttons: …"
+- [ ] Accessibility, Speech: **How much the app says** is Medium; under it **Say "Replay" before each replay** is on and **Results in words** is Full (build 31)
+- [ ] Low turns "Replay" off and sets Results in words to Short; with Speak directions aloud on, a screen says only its name; the result of a try is still shown and said in short
+- [ ] High turns "Replay" on and sets Results in words to Full; with Speak directions aloud on (or VoiceOver on), a screen also says "On this screen. Sections: … Buttons: …"
 - [ ] There is no "Synchronized visual replay" switch; with Audio + Visual the replay is shown on the screen
 - [ ] Instructor setup starts with **Students on this phone**. **Add a student**: the date is today; a code is required and must be new; after Add the app starts again as that student, with no times and no history, and Home says "Student: …"
 - [ ] Choosing the first student brings back its times and history
@@ -270,12 +270,52 @@ the street.
       the replay starts only after the words
 - [ ] After each replay, one sentence describing it ending with the usual
       prompt; never a number of seconds
-- [ ] Accessibility > Speech: turning both switches off restores silence
-      (word, descriptions and all); the bar still shows
+- [ ] Accessibility > Speech: with **Say "Replay" before each replay** off
+      and **Results in words** set to Off (build 31), nothing is said (word,
+      descriptions and all); the bar still shows
 - [ ] With VoiceOver or TalkBack **on**: the same words are read by the screen
       reader, not twice
 - [ ] Score lines under the buttons show no "margin 0.40s" (F2); it returns
       with **Show user times** on
+
+### D10 — Results in words: Full, Short or Off (build 31, tracker 28.10)
+Accessibility > Speech. Start with **Speak directions aloud** off and
+VoiceOver and TalkBack off; then repeat with **Speak directions aloud** on,
+and with VoiceOver or TalkBack on.
+
+**Pass:**
+- [ ] **Results in words** has three choices, Full, Short and Off, where the
+      tick box "Announce results and describe the sounds" was; Full is chosen
+      on a new install
+- [ ] Changing the choice is confirmed in words: "Results in words: full.",
+      "short." or "off."
+- [ ] Full: in Practice my timing the first three tries end with the whole
+      sentence ("That was your taps, then the crossing time: within the
+      margin. Ready for another try."); the fourth try ends with the short
+      result only ("Within the margin. Ready for another try.")
+- [ ] Full: after one try in another activity, the next try in Practice my
+      timing ends with the whole sentence again; so does a try after three
+      days away
+- [ ] Short: every try ends with the short result only, from the first try
+- [ ] The short result is spoken by the app's voice even with **Speak
+      directions aloud** off, as the whole sentence is; with VoiceOver or
+      TalkBack on, the screen reader says it and the app's voice stays
+      quiet; it is never heard twice
+- [ ] The replay or the next step starts only when the short result is over
+- [ ] Off: after a try nothing is said, not the result and not "Ready for
+      another try"; the right or wrong sound and the vibration are still
+      given, the status line still shows the result, and the next try starts
+      as usual
+- [ ] Off with VoiceOver or TalkBack on: the screen reader says nothing after
+      a try
+- [ ] **How much the app says**: Low sets Short; Medium and High set Full; no
+      level sets Off
+- [ ] **Choose this: On each activity page**: each activity page has the same
+      three choices below its introduction, and each page keeps its own
+- [ ] Updating from build 30: a ticked box is now Full, an unticked box is
+      now Short; nobody is on Off without choosing it
+- [ ] The words themselves are unchanged: "within the margin" and "outside
+      the margin"
 
 ---
 

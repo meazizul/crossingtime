@@ -38,17 +38,19 @@ async function practiceOneTry(page, storage = {}) {
   await page.click("#actionBtn");                       // Mark (Halfway), on time
 }
 
+// Build 31 (tracker 28.10): the results in words are a choice of Full, Short
+// or Off where the tick box was; an unticked box from an older build is Short.
 test("settings: both speech options exist, are on by default, and persist", async ({ page }) => {
   await openApp(page);
   await expect(page.locator("#a11ySayReplay")).toBeChecked();
-  await expect(page.locator("#a11yDescribeSounds")).toBeChecked();
-  expect(await page.evaluate(() => [a11ySettings.sayReplay, a11ySettings.describeSounds])).toEqual([true, true]);
-  await page.evaluate(() => { const b = document.getElementById("a11yDescribeSounds"); b.checked = false; b.dispatchEvent(new Event("change")); });
-  expect(await page.evaluate(() => localStorage.getItem("om-a11y-describe-sounds"))).toBe("false");
+  await expect(page.locator("#a11yResultsWords")).toHaveValue("full");
+  expect(await page.evaluate(() => [a11ySettings.sayReplay, a11ySettings.resultsWords])).toEqual([true, "full"]);
+  await page.evaluate(() => { const b = document.getElementById("a11yResultsWords"); b.value = "short"; b.dispatchEvent(new Event("change")); });
+  expect(await page.evaluate(() => localStorage.getItem("om-a11y-results-words"))).toBe("short");
   await openApp(page, { storage: { "om-a11y-describe-sounds": "false", "om-a11y-say-replay": "false" } });
   await expect(page.locator("#a11ySayReplay")).not.toBeChecked();
-  await expect(page.locator("#a11yDescribeSounds")).not.toBeChecked();
-  expect(await page.evaluate(() => [a11ySettings.sayReplay, a11ySettings.describeSounds])).toEqual([false, false]);
+  await expect(page.locator("#a11yResultsWords")).toHaveValue("short");
+  expect(await page.evaluate(() => [a11ySettings.sayReplay, a11ySettings.resultsWords])).toEqual([false, "short"]);
 });
 
 test("practice: 'Replay' is spoken before the tones, and the replay is described in words after it", async ({ page }) => {
@@ -83,15 +85,28 @@ test("practice: 'Replay' is spoken before the tones, and the replay is described
   expect(errors).toEqual([]);
 });
 
-test("practice: with the options off nothing is spoken and the lead-in is the old 1.5 s", async ({ page }) => {
+test("practice: with both options off in an older build, only the short result is spoken and the lead-in is the old 1.5 s", async ({ page }) => {
   await page.clock.install();
   await fakeSpeech(page);
   await practiceOneTry(page, { "om-a11y-say-replay": "false", "om-a11y-describe-sounds": "false" });
   await tick(page, 9000);
+  // Tracker 20.2: with the descriptions off the verdict is still given, in
+  // short. Build 31 (tracker 28.10): the unticked box is now Short, and the
+  // short result is said by the app's voice, as the whole sentence is, and
+  // not by the live region as well.
+  expect(await spoken(page)).toEqual(["Within the margin. Ready for another try."]);
+  expect(await history(page)).toHaveLength(1);
+  expect(await announcer(page)).not.toContain("Within the margin");
+});
+
+test("practice: with 'Replay' off and Results in words off, nothing is spoken", async ({ page }) => {
+  await page.clock.install();
+  await fakeSpeech(page);
+  await practiceOneTry(page, { "om-a11y-say-replay": "false", "om-a11y-results-words": "off" });
+  await tick(page, 9000);
   expect(await spoken(page)).toEqual([]);
   expect(await history(page)).toHaveLength(1);
-  // Tracker 20.2: with the descriptions off the verdict is still read, in short.
-  expect(await announcer(page)).toBe("Within the margin. Ready for another try.");
+  expect(await announcer(page)).not.toContain("margin");
 });
 
 test("practice: with a screen reader running the words go to the live region, not the app's own voice", async ({ page }) => {

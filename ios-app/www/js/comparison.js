@@ -1392,7 +1392,9 @@ function gsCompareAnswer(answer) {
 
   // Build 15: the result in words after the sound, for everyone, and the
   // next step waits for the words, so they are never cut off (the reason
-  // words were removed in 12.29). Off under Accessibility > Speech.
+  // words were removed in 12.29). Full, Short or Off under Accessibility >
+  // Speech (build 31, tracker 28.10); this answer is one more try here.
+  gsResultsTry("compare");
   const verdict = correct ? "Correct." : `Not correct. It was ${gsAnswerTruthWords(gsCompareState.intervalSec, gsCompareState.crossingSec, gsCompareState.rangeSec)}.`;
   gsCompareState.lastDescribe = "That was the sample warning time, then your own sound where your crossing time ends.";
 
@@ -1447,10 +1449,15 @@ function gsCompareFinish(message, tone = "neutral", { focus = "play", describe =
   gsCompareState.phase = "idle";
   gsCompareSetStartEnabled(true);
   // The replay in words, then the prompt, as one utterance (build 15).
-  const said = Boolean(describe) && gsDescribeOn() && gsDescribe(`${describe} ${message}`);
-  // Off (Speech: Low): the verdict still shows and is read, in short (20.2).
-  const verdict = said ? "" : gsVerdictFromDescribe(describe);
-  gsCompareStatus(verdict ? `${verdict} ${message}` : message, tone, { announce: !said });
+  // Short (Speech: Low, or Full from the fourth try): the verdict shows and
+  // is said, in short (20.2). Off (tracker 28.10): after a try it shows, and
+  // nothing is said. A message with no replay behind it (cancelled,
+  // interrupted) is read as before.
+  const shortVerdict = gsVerdictFromDescribe(describe);
+  const shortText = shortVerdict ? `${shortVerdict} ${message}` : message;
+  const said = describe ? gsSayTryResult(`${describe} ${message}`, shortText) : "";
+  const silent = Boolean(describe) && gsResultsWordsOff();
+  gsCompareStatus(said === "whole" ? message : shortText, tone, { announce: !said && !silent });
   gsPlayAgainShow("compare", focus !== "title");
   // After Back, focus goes to the screen's title (tracker 13.7); after Play it
   // again, the button itself; otherwise Play, where the student already is.
@@ -1884,6 +1891,7 @@ function gsLiveArrived(atMs) {
 
   if (!gsLiveJudgeEnabled()) {
     gsLiveLog({ judged: false, answer: null, correct: false });
+    gsResultsTry("live");   // a vehicle with no judgment is a try too (tracker 28.10)
     gsLiveAfterVehicle({ judged: false, correct: true });
     return;
   }
@@ -1922,6 +1930,7 @@ function gsLiveAnswer(answer) {
   gsLiveLog({ judged: true, answer, correct });
   // The cue carries the result, then the result in words (build 15); the
   // next step waits for the words so they are never cut off (12.29).
+  gsResultsTry("live");   // one more try here, for the results in words (tracker 28.10)
   gsShowResult(correct);
   gsLiveStatus("", "neutral", { announce: false });
   const verdict = correct ? "Correct." : `Not correct. It was ${gsAnswerTruthWords(gsLiveState.warningSec, gsLiveState.crossingSec, gsLiveState.rangeSec)}.`;
@@ -2110,10 +2119,14 @@ function gsLiveReady({ describe = "" } = {}) {
   gsLiveRenderPad();
   const message = "Ready for the next vehicle.";
   // The replay in words, then the prompt, as one utterance (build 15).
-  const said = Boolean(describe) && gsDescribeOn() && gsDescribe(`${describe} ${message}`);
-  // Off (Speech: Low): the verdict still shows and is read, in short (20.2).
-  const verdict = said ? "" : gsVerdictFromDescribe(describe);
-  gsLiveStatus(verdict ? `${verdict} ${message}` : message, "neutral", { announce: !said });
+  // Short (Speech: Low, or Full from the fourth vehicle): the verdict shows
+  // and is said, in short (20.2). Off (tracker 28.10): it shows, and nothing
+  // is said after a vehicle. With no replay there is nothing to describe,
+  // and the prompt is read as before.
+  const shortVerdict = gsVerdictFromDescribe(describe);
+  const shortText = shortVerdict ? `${shortVerdict} ${message}` : message;
+  const said = describe ? gsSayTryResult(`${describe} ${message}`, shortText, "live") : "";
+  gsLiveStatus(said === "whole" ? message : shortText, "neutral", { announce: !said && !gsResultsWordsOff("live") });
   const playAgain = gsPlayAgainButton("live");
   const wasPlayingAgain = playAgain && !playAgain.hidden && gsIsBusy(playAgain);
   gsPlayAgainShow("live", true);

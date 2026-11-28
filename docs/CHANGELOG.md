@@ -8,6 +8,60 @@ than commit history. They are accurate to the day.
 
 ---
 
+## 2026-11-28 (build 31) — results in words: Full, Short or Off
+
+From tracker entry 28.10, found by Cindi Lashinsky on build 28. The design
+was agreed by her on 27 November 2026.
+
+Everything below was checked by automated tests in a browser, not on a
+phone.
+
+- **Results in words: Full, Short or Off (28.10).** With "Speak directions
+  aloud" on, the app said the result and "Ready for another try" after every
+  try, and there was no way to make it stop: with the tick box "Announce
+  results and describe the sounds" unticked, the short result was still said
+  (by design since tracker 20.2). The tick box in Accessibility, under
+  Speech, is now a choice of three, called **Results in words**:
+  - **Full** (the default): the whole sentence, for example "That was your
+    taps, then the crossing time: within the margin. Ready for another try.",
+    for the first three tries in an activity. From the fourth try on, only
+    the short result. The whole sentence comes back after three days without
+    a try in that activity, or after a try in another activity.
+  - **Short**: only the short result on every try, for example "Within the
+    margin. Ready for another try." or "Correct." These are the words the
+    unticked box gave.
+  - **Off**: nothing is said after a try, not the result and not "Ready for
+    another try". Nothing is spoken by the app's voice and nothing is given
+    to VoiceOver or TalkBack. The right and wrong sounds and the vibration
+    carry the result, and it still shows on the screen. The next step of the
+    activity follows as before.
+- **The short result is said aloud, like the whole sentence.** Until build
+  30 the short result was shown, and read only by a screen reader or with
+  "Speak directions aloud" on. It is now said the same way as the whole
+  sentence and to the same people: by VoiceOver or TalkBack when one is
+  running, otherwise by the app's own voice, and never by both. The next
+  step waits for the words to end. Without this, Full would have gone silent
+  after the third try for a student who uses neither a screen reader nor
+  "Speak directions aloud" (decided 28 November 2026). A student whose box
+  was unticked in build 30 is on Short and now hears the short result in the
+  app's voice; Off is there for no words.
+- **Verbosity.** High and Medium set Full; Low sets Short (Cindi: "low says
+  inside or outside only, medium or high the whole sentence"). Off is only
+  ever chosen by hand.
+- **On each activity page.** With "Choose this: On each activity page", each
+  activity page has the same three choices where it had a tick box.
+- **Updating from build 30.** A ticked box becomes Full and an unticked box
+  becomes Short, in Accessibility and on each activity page. Nobody is moved
+  to Off by the update.
+- A changed choice is confirmed in words ("Results in words: full.",
+  "short." or "off."), by the app's voice or by the screen reader. The new
+  sentences are in the recorded natural voice.
+- The wording of the result itself is not changed in this build: "within the
+  margin" and "outside the margin" stay for now (decision D1; plainer words
+  are left until after the SOMA conference on 5 December 2026).
+- Tests: build31-results-words.spec.mjs (22); the tests of the old tick box
+  updated.
+
 ## 2026-11-27 (build 30) — the session code first, and students that switch
 
 From Cindi Lashinsky's three tracker entries for build 29 (29.1 to 29.3),

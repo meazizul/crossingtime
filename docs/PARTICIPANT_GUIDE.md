@@ -269,12 +269,23 @@ or faster speaking rate.
 reader. Medium is the start. High also tells you what is on each screen when
 it opens. Low says only the basics, for when you know the app well.
 
-**Say "Replay" before each replay** and **Announce results and describe the
-sounds.** At Medium and High both are on. The app says "Replay" before every
-replay, says whether you were right after the right-or-wrong sound, and
-describes each replay in words when it is over. Never a number of seconds. If
-you use VoiceOver or TalkBack, your screen reader reads these words. Turn
-either off here if you prefer the sounds alone.
+**Say "Replay" before each replay.** At Medium and High this is on. The app
+says "Replay" before every replay. Turn it off here if you do not want it.
+
+**Results in words.** This is what the app says after a try. There are three
+choices:
+
+- **Full.** This is the start. For your first three tries in an activity, the
+  app says the whole sentence when the replay is over. After that it says
+  only the short result, for example "Within the margin." The whole sentence
+  comes back when you have been away for a few days, or after you have done
+  another activity.
+- **Short.** The app says only the short result, every time.
+- **Off.** The app says nothing after a try. The right and wrong sounds and
+  the vibration tell you the result. It still shows on the screen.
+
+The app never says a number of seconds. If you use VoiceOver or TalkBack,
+your screen reader reads these words. At Low, the app uses Short.
 
 **Colors.** Choose light, dark, or yellow-on-black. There is also a
 high-contrast setting.

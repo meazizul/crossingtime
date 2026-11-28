@@ -8,8 +8,10 @@
      *   om-a11y-text-size, om-a11y-high-contrast, om-a11y-focus-boost,
      *   om-a11y-announce-cues, (om-a11y-sync-visual-replay until build 19),
      *   om-a11y-outside-visual-variant, om-a11y-user-flash-contrast,
-     *   om-a11y-say-replay, om-a11y-describe-sounds (build 15),
-     *   om-a11y-verbosity (build 20)
+     *   om-a11y-say-replay (build 15), om-a11y-verbosity (build 20),
+     *   om-a11y-results-words and om-a11y-results-words-<activity>
+     *   (build 31; until build 30 om-a11y-describe-sounds and
+     *   om-a11y-describe-<activity>), om-results-tries-<activity> (build 31)
      * Cue types: start, marker, replay_start, replay_end,
      *            validation_error, reference_ok, reference_bad
      * ============================================================ */
@@ -50,7 +52,7 @@
     const a11ySelfVoice = document.getElementById("a11ySelfVoice");
     const a11ySayReplay = document.getElementById("a11ySayReplay");
     const a11yVerbosity = document.getElementById("a11yVerbosity");
-    const a11yDescribeSounds = document.getElementById("a11yDescribeSounds");
+    const a11yResultsWords = document.getElementById("a11yResultsWords");
     const a11yDescribeWhere = document.getElementById("a11yDescribeWhere");
     const a11ySpeechRate = document.getElementById("a11ySpeechRate");
     const a11yVoice = document.getElementById("a11yVoice");
@@ -126,7 +128,7 @@
       a11yAnnounceCues,
       a11ySelfVoice,
       a11ySayReplay,
-      a11yDescribeSounds,
+      a11yResultsWords,
       a11ySpeechRate,
       a11yVoice,
       soundTestBtn,
@@ -217,10 +219,12 @@
       // right-or-wrong sound and after each replay, for everyone, whether or
       // not a screen reader is running. Never a number of seconds.
       sayReplay: true,
-      describeSounds: true,
-      // Build 27 (tracker F12, Cindi 15 Nov 2026): "all" = the switch in
+      // Build 31 (tracker 28.10, Cindi 27 Nov 2026): the results in words are
+      // "full", "short" or "off", where builds 15 to 30 had a tick box.
+      resultsWords: "full",
+      // Build 27 (tracker F12, Cindi 15 Nov 2026): "all" = the choice in
       // Accessibility applies to every activity; "each" = every activity page
-      // has its own switch (om-a11y-describe-<activity>).
+      // has its own choice (om-a11y-results-words-<activity>).
       describeWhere: "all",
       verbosity: "medium",
       speechRate: 1
@@ -3383,41 +3387,146 @@
       return GS_REPLAY_INTRO_SEC;
     }
 
-    /* Build 27 (tracker F12): whether results are said in words in the
-     * activity on screen. With "On each activity page", each activity keeps
-     * its own choice; one not yet set follows the switch in Accessibility. */
+    /* Results in words after a try. Build 27 (tracker F12): with "On each
+     * activity page", each activity keeps its own choice; one not yet set
+     * follows the choice in Accessibility.
+     *
+     * Build 31 (tracker 28.10, found by Cindi Lashinsky on build 28; design
+     * agreed by her 27 Nov 2026): three choices where there was a tick box.
+     *   full   the whole sentence ("That was your taps, then the crossing
+     *          time: within the margin. Ready for another try.") for the
+     *          first three tries in an activity, then the short result. The
+     *          whole sentence comes back after three days without a try in
+     *          that activity, or after a try in another activity.
+     *   short  the short result on every try ("Within the margin. Ready for
+     *          another try.", "Correct."): the words the unticked box gave
+     *          in builds 20 to 30 (tracker 20.2).
+     *   off    no words after a try: nothing spoken by the app and nothing
+     *          given to VoiceOver or TalkBack, not even "Ready for another
+     *          try". The right and wrong sounds and the vibration carry the
+     *          result, and the status line still shows it.
+     * The short result is said the same way as the whole sentence, to the
+     * same people (gsSayResult): by the screen reader when one is running,
+     * otherwise by the app's own voice. Until build 30 the short result was
+     * shown and given to the screen reader or to "Speak directions aloud"
+     * only; left like that, Full would have gone silent after the third try
+     * for everyone else (decided 28 Nov 2026).
+     * The wording itself is not changed in this build (decision D1: "within
+     * the margin" and "outside the margin" stay for now). */
     const GS_RESULTS_WORDS_ACTIVITIES = ["practice", "signal", "compare", "live"];
+    const GS_RESULTS_WORDS_LEVELS = ["full", "short", "off"];
+    const GS_RESULTS_FULL_TRIES = 3;
+    const GS_RESULTS_AWAY_MS = 3 * 24 * 60 * 60 * 1000;
     function gsVisibleActivity() {
       return GS_RESULTS_WORDS_ACTIVITIES.find((name) => {
         const el = document.getElementById(`screen-${name}`);
         return el && !el.hidden;
       }) || null;
     }
-    function gsDescribeOn(activity = gsVisibleActivity()) {
-      if (a11ySettings.describeWhere !== "each" || !activity) return a11ySettings.describeSounds;
-      const own = localStorage.getItem(`om-a11y-describe-${activity}`);
-      return own === null ? a11ySettings.describeSounds : own === "true";
+
+    /* The choice stored under `key`: "full", "short" or "off", or null when
+     * nothing is stored. A choice kept by build 30 or earlier under `oldKey`
+     * is carried over once: ticked ("true") is Full, unticked ("false") is
+     * Short. Nobody is moved to Off by the update. */
+    function gsResultsWordsStored(key, oldKey) {
+      const now = localStorage.getItem(key);
+      const old = localStorage.getItem(oldKey);
+      if (old !== null) localStorage.removeItem(oldKey);
+      if (GS_RESULTS_WORDS_LEVELS.includes(now)) return now;
+      if (old === null) return null;
+      const level = old === "false" ? "short" : "full";
+      localStorage.setItem(key, level);
+      return level;
     }
-    function gsRenderResultsWordsSwitches() {
-      const each = a11ySettings.describeWhere === "each";
-      document.querySelectorAll("[data-results-words]").forEach((box) => {
-        const wrap = box.closest(".results-words-switch");
-        if (wrap) wrap.hidden = !each;
-        box.checked = gsDescribeOn(box.dataset.resultsWords);
-      });
-      const global = document.getElementById("a11yDescribeSounds");
-      if (global) {
-        global.disabled = each;
-        global.closest("label")?.classList.toggle("is-disabled", each);
+
+    /* The choice for an activity: Full, Short or Off. */
+    function gsResultsWords(activity = gsVisibleActivity()) {
+      if (a11ySettings.describeWhere !== "each" || !activity) return a11ySettings.resultsWords;
+      const own = localStorage.getItem(`om-a11y-results-words-${activity}`);
+      return GS_RESULTS_WORDS_LEVELS.includes(own) ? own : a11ySettings.resultsWords;
+    }
+
+    /* How many tries in a row the activity has had, and when the last one
+     * was: { count, at }. Kept with the student's own data, not with the
+     * accessibility settings, so a student added to the phone starts from
+     * the whole sentence. */
+    function gsResultsTries(activity) {
+      try {
+        const kept = JSON.parse(localStorage.getItem(`om-results-tries-${activity}`) || "null");
+        if (kept && Number.isFinite(kept.count) && Number.isFinite(kept.at)) return kept;
+      } catch (error) {
+        /* not readable: as if there were no tries */
+      }
+      return null;
+    }
+
+    /* A try in an activity has been scored: it counts as one more try
+     * there, and the other activities start again from the whole sentence.
+     * Three days or more since the last try starts this one again too. */
+    function gsResultsTry(activity) {
+      if (!GS_RESULTS_WORDS_ACTIVITIES.includes(activity)) return;
+      const now = Date.now();
+      const kept = gsResultsTries(activity);
+      const again = !kept || now < kept.at || now - kept.at >= GS_RESULTS_AWAY_MS;
+      try {
+        localStorage.setItem(`om-results-tries-${activity}`, JSON.stringify({ count: again ? 1 : kept.count + 1, at: now }));
+        GS_RESULTS_WORDS_ACTIVITIES.forEach((name) => {
+          if (name !== activity) localStorage.removeItem(`om-results-tries-${name}`);
+        });
+      } catch (error) {
+        /* storage full: the whole sentence is said once more */
       }
     }
 
-    /* Speaks a description (or hands it to the screen reader). onDone runs
+    /* A changed choice starts from the whole sentence again. */
+    function gsResultsTriesReset(activity = null) {
+      GS_RESULTS_WORDS_ACTIVITIES.forEach((name) => {
+        if (!activity || name === activity) localStorage.removeItem(`om-results-tries-${name}`);
+      });
+    }
+
+    /* What the try that has just been scored gets: "full", "short" or
+     * "off". Full gives "short" from the fourth try on. */
+    function gsResultsWordsNow(activity = gsVisibleActivity()) {
+      const level = gsResultsWords(activity);
+      if (level !== "full" || !activity) return level;
+      const kept = gsResultsTries(activity);
+      const since = kept ? Date.now() - kept.at : 0;
+      return kept && kept.count > GS_RESULTS_FULL_TRIES && since >= 0 && since < GS_RESULTS_AWAY_MS ? "short" : "full";
+    }
+
+    /* Whether the whole sentence is due now in the activity on screen. */
+    function gsDescribeOn(activity = gsVisibleActivity()) {
+      return gsResultsWordsNow(activity) === "full";
+    }
+
+    /* Off: nothing is said or announced after a try. */
+    function gsResultsWordsOff(activity = gsVisibleActivity()) {
+      return gsResultsWords(activity) === "off";
+    }
+
+    function gsRenderResultsWordsSwitches() {
+      const each = a11ySettings.describeWhere === "each";
+      document.querySelectorAll("[data-results-words]").forEach((choice) => {
+        const wrap = choice.closest(".results-words-switch");
+        if (wrap) wrap.hidden = !each;
+        choice.value = gsResultsWords(choice.dataset.resultsWords);
+      });
+      const global = document.getElementById("a11yResultsWords");
+      if (global) {
+        global.disabled = each;
+        document.querySelector('label[for="a11yResultsWords"]')?.classList.toggle("is-disabled", each);
+      }
+    }
+
+    /* Says a result in words, whole or short, one way only so that nothing
+     * is heard twice: the screen reader when one is running; otherwise the
+     * app's own voice; with no voice to use, the live region. onDone runs
      * when the words are over and at least minSec have passed. Returns
      * whether anything was said. */
-    function gsDescribe(text, { onDone = null, minSec = 0 } = {}) {
+    function gsSayResult(text, { onDone = null, minSec = 0 } = {}) {
       const finish = (afterMs) => { if (onDone) setTimeout(onDone, Math.max(0, afterMs)); };
-      if (!gsDescribeOn() || !text) {
+      if (!text) {
         finish(minSec * 1000);
         return false;
       }
@@ -3446,19 +3555,48 @@
       return true;
     }
 
-    /* The next step of an activity after a description: with nothing to say
-     * it is an ordinary (cancellable) timer; after words, the words end it. */
-    function gsDescribeThen(timers, text, fn, minSec, show = null) {
+    /* The whole sentence, when it is due in the activity on screen (Full,
+     * first three tries); otherwise nothing is said here and false comes
+     * back. */
+    function gsDescribe(text, { onDone = null, minSec = 0 } = {}) {
       if (!gsDescribeOn() || !text) {
-        // Off (Speech: Low): the result is still shown and read in its short
-        // form, "Correct." or "Not correct.", as Settings and the App Guide
-        // say; only the description of the sounds is left out (tracker 20.2).
-        if (text && typeof show === "function") gsShowShortResult(gsShortResult(text), show);
-        const id = setTimeout(fn, Math.max(0, minSec) * 1000);
-        if (Array.isArray(timers)) timers.push(id);
+        if (onDone) setTimeout(onDone, Math.max(0, minSec * 1000));
+        return false;
+      }
+      return gsSayResult(text, { onDone, minSec });
+    }
+
+    /* What is said at the end of a try (build 31, tracker 28.10): the whole
+     * sentence when it is due, the short one for Short and for Full from the
+     * fourth try on, nothing for Off. Returns "whole", "short" or "" for
+     * what was said, so the caller shows the rest and announces nothing a
+     * second time. */
+    function gsSayTryResult(whole, short, activity = gsVisibleActivity()) {
+      const level = gsResultsWordsNow(activity);
+      if (level === "full" && whole) return gsSayResult(whole) ? "whole" : "";
+      if (level !== "off" && short) return gsSayResult(short) ? "short" : "";
+      return "";
+    }
+
+    /* The next step of an activity after a result: after words, the words
+     * end it; with nothing to say it is an ordinary (cancellable) timer. */
+    function gsDescribeThen(timers, text, fn, minSec, show = null) {
+      if (gsDescribeOn() && text) {
+        gsDescribe(text, { onDone: fn, minSec });
         return;
       }
-      gsDescribe(text, { onDone: fn, minSec });
+      // Short (Speech: Low, or Full after the first three tries): the result
+      // is shown and said in its short form, "Correct." or "Not correct.";
+      // only the description of the sounds is left out (tracker 20.2), and
+      // the next step waits for the words as it does for the whole sentence.
+      // Off (tracker 28.10): shown, and nothing is said.
+      if (text && typeof show === "function") {
+        const short = gsShortResult(text);
+        gsShowShortResult(short, show);
+        if (!gsResultsWordsOff() && gsSayResult(short, { onDone: fn, minSec })) return;
+      }
+      const id = setTimeout(fn, Math.max(0, minSec) * 1000);
+      if (Array.isArray(timers)) timers.push(id);
     }
 
     /*
@@ -3494,12 +3632,11 @@
       return match ? match[0] : String(text || "");
     }
 
-    /* Shows the short result in the activity's status line and hands it to
-     * the screen reader (and self-voicing), also in the quiet stretch. */
+    /* Shows the short result in the activity's status line. Saying it is
+     * gsSayResult's part (build 31), so it is never heard twice. */
     function gsShowShortResult(short, show) {
       if (!short) return;
       try { show(short); } catch (error) { /* the screen is closing */ }
-      announceScreenReader(short, { force: true });
     }
 
     /* "Within the margin." from a replay description that ends with the
@@ -3839,6 +3976,7 @@
       // rewrites the whole history, and anything scheduled after it came late
       // by that long, more so with a long history (tracker 20.10).
       logPracticeMarks(marks);
+      gsResultsTry("practice");   // one more try here, for the results in words (tracker 28.10)
 
       clearTimeout(replayTimeout);
       // What the replay was, in words, once it is over (build 15): your taps,
@@ -3851,12 +3989,15 @@
         suppressSrAnnouncements = false;
         resetState("Ready for another try.");
         renderPracticeScore();
-        const said = gsDescribeOn() && gsDescribe(`${describe} Ready for another try.`);
-        // Off (Low): the verdict still shows and is read, in short (20.2).
+        // Short (Low, or Full from the fourth try): the verdict shows and
+        // is said, in short (20.2). Off (tracker 28.10): it shows, and
+        // nothing is said.
         const shortVerdict = marks.length > 1 ? verdicts.join(", ") : gsVerdictWords(marks[0]?.feedbackType === "acceptable");
-        const short = said ? "" : `${shortVerdict.replace(/^./, (c) => c.toUpperCase())}. Ready for another try.`;
+        const shortText = `${shortVerdict.replace(/^./, (c) => c.toUpperCase())}. Ready for another try.`;
+        const said = gsSayTryResult(`${describe} Ready for another try.`, shortText);
+        const short = said === "whole" ? "" : shortText;
         if (short) setStatus(short);
-        emitCue("replay_end", { message: short || "Ready for another try.", skipAnnounce: Boolean(said) });
+        emitCue("replay_end", { message: short || "Ready for another try.", skipAnnounce: Boolean(said) || gsResultsWordsOff() });
       }, replayDoneAtSec * 1000);
     }
 
@@ -4016,7 +4157,10 @@
       const storedSelfVoice = localStorage.getItem("om-a11y-self-voice");
       const storedSpeechRate = Number(localStorage.getItem("om-a11y-speech-rate"));
       const storedSayReplay = localStorage.getItem("om-a11y-say-replay");
-      const storedDescribeSounds = localStorage.getItem("om-a11y-describe-sounds");
+      // Build 31 (tracker 28.10): Full, Short or Off. A tick box value kept
+      // by build 30 or earlier is carried over, here and for each activity.
+      const storedResultsWords = gsResultsWordsStored("om-a11y-results-words", "om-a11y-describe-sounds");
+      GS_RESULTS_WORDS_ACTIVITIES.forEach((name) => gsResultsWordsStored(`om-a11y-results-words-${name}`, `om-a11y-describe-${name}`));
 
       if (storedClear) clearTimeInput.value = storedClear;
       if (storedFull) fullTimeInput.value = storedFull;
@@ -4056,7 +4200,7 @@
       if (storedSelfVoice) a11ySettings.selfVoice = storedSelfVoice === "true";
       if ([0.8, 1, 1.25].includes(storedSpeechRate)) a11ySettings.speechRate = storedSpeechRate;
       if (storedSayReplay) a11ySettings.sayReplay = storedSayReplay === "true";
-      if (storedDescribeSounds) a11ySettings.describeSounds = storedDescribeSounds === "true";
+      if (storedResultsWords) a11ySettings.resultsWords = storedResultsWords;
       a11ySettings.describeWhere = localStorage.getItem("om-a11y-describe-where") === "each" ? "each" : "all";
       const storedVerbosity = localStorage.getItem("om-a11y-verbosity");
       if (["high", "medium", "low"].includes(storedVerbosity)) a11ySettings.verbosity = storedVerbosity;
@@ -4090,7 +4234,7 @@
       if (a11ySpeechRate) a11ySpeechRate.value = String(a11ySettings.speechRate);
       if (a11yVoice) a11yVoice.value = gsVoiceNatural() ? "natural" : "phone";
       if (a11ySayReplay) a11ySayReplay.checked = a11ySettings.sayReplay;
-      if (a11yDescribeSounds) a11yDescribeSounds.checked = a11ySettings.describeSounds;
+      if (a11yResultsWords) a11yResultsWords.value = a11ySettings.resultsWords;
       if (a11yDescribeWhere) a11yDescribeWhere.value = a11ySettings.describeWhere;
       gsRenderResultsWordsSwitches();
       if (a11yVerbosity) a11yVerbosity.value = a11ySettings.verbosity;
@@ -4384,19 +4528,23 @@
 
     /* Verbosity (build 20, Cindi 1 Nov 2026): High, Medium (what builds 15-19
      * did, the default) or Low. A level sets the replay word and the
-     * spoken results; each can then be changed on its own. */
+     * results in words; each can then be changed on its own. Build 31
+     * (tracker 28.10; Cindi: "low says inside or outside only, medium or
+     * high the whole sentence"): High and Medium set Full, Low sets Short.
+     * Off is only ever chosen by hand. */
     a11yVerbosity?.addEventListener("change", () => {
       const level = ["high", "medium", "low"].includes(a11yVerbosity.value) ? a11yVerbosity.value : "medium";
       a11ySettings.verbosity = level;
       localStorage.setItem("om-a11y-verbosity", level);
       const more = level !== "low";
       a11ySettings.sayReplay = more;
-      a11ySettings.describeSounds = more;
+      a11ySettings.resultsWords = more ? "full" : "short";
       localStorage.setItem("om-a11y-say-replay", String(more));
-      localStorage.setItem("om-a11y-describe-sounds", String(more));
+      localStorage.setItem("om-a11y-results-words", a11ySettings.resultsWords);
       if (a11ySayReplay) a11ySayReplay.checked = more;
-      if (a11yDescribeSounds) a11yDescribeSounds.checked = more;
-      GS_RESULTS_WORDS_ACTIVITIES.forEach((name) => localStorage.removeItem(`om-a11y-describe-${name}`));
+      if (a11yResultsWords) a11yResultsWords.value = a11ySettings.resultsWords;
+      GS_RESULTS_WORDS_ACTIVITIES.forEach((name) => localStorage.removeItem(`om-a11y-results-words-${name}`));
+      gsResultsTriesReset();
       gsRenderResultsWordsSwitches();
       gsConfirmSetting({ high: "Verbosity high.", medium: "Verbosity medium.", low: "Verbosity low." }[level]);
     });
@@ -4407,33 +4555,47 @@
       if (a11ySettings.sayReplay) gsConfirmSetting("Replay");
     });
 
-    a11yDescribeSounds?.addEventListener("change", () => {
-      a11ySettings.describeSounds = a11yDescribeSounds.checked;
-      localStorage.setItem("om-a11y-describe-sounds", String(a11ySettings.describeSounds));
+    // Build 31 (tracker 28.10): Full, Short or Off, confirmed in words like
+    // the other settings. A new choice starts from the whole sentence again.
+    a11yResultsWords?.addEventListener("change", () => {
+      a11ySettings.resultsWords = GS_RESULTS_WORDS_LEVELS.includes(a11yResultsWords.value) ? a11yResultsWords.value : "full";
+      localStorage.setItem("om-a11y-results-words", a11ySettings.resultsWords);
+      gsResultsTriesReset();
       gsRenderResultsWordsSwitches();
-      if (a11ySettings.describeSounds) gsConfirmSetting("The app will announce results and describe the sounds.");
+      gsConfirmSetting({
+        full: "Results in words: full.",
+        short: "Results in words: short.",
+        off: "Results in words: off."
+      }[a11ySettings.resultsWords]);
     });
 
     // Build 27 (tracker F12): choose it here for every activity, or on each
     // activity page. Switching to "each" starts every page from the current
-    // choice, so nothing changes until the student changes a page's switch.
+    // choice, so nothing changes until the student changes a page's choice.
     a11yDescribeWhere?.addEventListener("change", () => {
       a11ySettings.describeWhere = a11yDescribeWhere.value === "each" ? "each" : "all";
       localStorage.setItem("om-a11y-describe-where", a11ySettings.describeWhere);
       if (a11ySettings.describeWhere === "each") {
         GS_RESULTS_WORDS_ACTIVITIES.forEach((name) => {
-          localStorage.setItem(`om-a11y-describe-${name}`, String(a11ySettings.describeSounds));
+          localStorage.setItem(`om-a11y-results-words-${name}`, a11ySettings.resultsWords);
         });
       }
       gsRenderResultsWordsSwitches();
       announceScreenReader(a11ySettings.describeWhere === "each"
-        ? "Each activity page now has its own switch for announcing results."
-        : "The switch here now applies to every activity.");
+        ? "Each activity page now has its own choice for results in words."
+        : "The choice here now applies to every activity.");
     });
-    document.querySelectorAll("[data-results-words]").forEach((box) => {
-      box.addEventListener("change", () => {
-        localStorage.setItem(`om-a11y-describe-${box.dataset.resultsWords}`, String(box.checked));
-        announceScreenReader(box.checked ? "Results will be announced in words here." : "Results will not be announced in words here.");
+    document.querySelectorAll("[data-results-words]").forEach((choice) => {
+      choice.addEventListener("change", () => {
+        const activity = choice.dataset.resultsWords;
+        const level = GS_RESULTS_WORDS_LEVELS.includes(choice.value) ? choice.value : "full";
+        localStorage.setItem(`om-a11y-results-words-${activity}`, level);
+        gsResultsTriesReset(activity);
+        announceScreenReader({
+          full: "Results in words here: full.",
+          short: "Results in words here: short.",
+          off: "Results in words here: off."
+        }[level]);
       });
     });
 
